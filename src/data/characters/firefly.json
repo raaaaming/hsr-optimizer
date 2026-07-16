@@ -1,0 +1,58 @@
+{
+    "id":"firefly",
+
+    "name":"Firefly",
+
+    "element":"fire",
+
+    "path":"destruction",
+
+    "rarity":5,
+
+    "baseStats":{
+
+        "hp":814,
+
+        "atk":756,
+
+        "def":485,
+
+        "spd":104
+
+    },
+
+    "actions":[
+
+        {
+
+            "id":"basic",
+
+            "name":"Basic Attack",
+
+            "formula":"firefly.basic"
+
+        },
+
+        {
+
+            "id":"skill",
+
+            "name":"Skill",
+
+            "formula":"firefly.skill"
+
+        },
+
+        {
+
+            "id":"ultimate",
+
+            "name":"Ultimate",
+
+            "formula":"firefly.ultimate"
+
+        }
+
+    ]
+
+}
