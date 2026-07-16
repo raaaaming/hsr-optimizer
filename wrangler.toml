@@ -7,5 +7,11 @@ workers_dev = true
 directory = "./public"
 binding = "ASSETS"
 
+[[d1_databases]]
+binding = "DB"
+database_name = "hsr-optimizer"
+database_id = "bbbdaf21-ffd8-43ca-b898-830e3cd347ea"
+migrations_dir = "migrations"
+
 [observability]
 enabled = true

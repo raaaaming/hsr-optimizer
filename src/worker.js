@@ -7,16 +7,24 @@ export default {
     } catch (error) {
       console.error(error);
 
+      // stack은 내부 경로를 노출하므로 DEBUG일 때만 내려보낸다.
+      const body = {
+        success: false,
+        message: "Internal Server Error"
+      };
+
+      if (env.DEBUG === "true") {
+        body.error = error.message;
+        body.stack = error.stack;
+      }
+
       return new Response(
-        JSON.stringify({
-          success: false,
-          error: error.message,
-          stack: error.stack
-        }, null, 2),
+        JSON.stringify(body, null, 2),
         {
           status: 500,
           headers: {
-            "Content-Type": "application/json; charset=utf-8"
+            "Content-Type": "application/json; charset=utf-8",
+            "Access-Control-Allow-Origin": "*"
           }
         }
       );

@@ -1,5 +1,6 @@
 import { characterRegistry } from "../registry/index.js";
 import { formulaRegistry } from "../formula/index.js";
+import { statsCalculator } from "../services/StatsCalculator.js";
 
 export class DamageEngine {
 
@@ -29,7 +30,8 @@ export class DamageEngine {
 
         }
 
-        const stats = statsCalculator.calculate(
+        // 공식은 최종 스탯만 필요하다. base/bonus 분해는 UI 표시용이다.
+        const { final: stats } = statsCalculator.calculate(
 
             character,
 
