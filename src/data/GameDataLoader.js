@@ -1,4 +1,4 @@
-import { CharacterLoader } from "./loader/CharacterLoader.js";
+import { CharacterLoader } from "./CharacterLoader.js";
 import { characterRegistry } from "../registry/index.js";
 
 export class GameDataLoader {

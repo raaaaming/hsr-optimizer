@@ -2,9 +2,6 @@ export class Character {
 
     constructor() {
 
-        /**
-         * 기본 정보
-         */
         this.id = "";
         this.name = "";
         this.element = "";
@@ -12,69 +9,84 @@ export class Character {
         this.rarity = 5;
 
         /**
-         * 레벨 / 성혼
-         * (빌드에서 덮어쓸 수 있음)
+         * 레벨/돌파에 따라 계산되는 기본 스탯 정의
          */
-        this.level = 80;
-        this.eidolon = 0;
-
-        /**
-         * 기본 스탯
-         */
-        this.baseStats = {
-
-            hp: 0,
-
-            atk: 0,
-
-            def: 0,
-
+        this.stats = {
+            base: { hp: 0, atk: 0, def: 0 },
+            growth: { hp: 0, atk: 0, def: 0 },
+            ascensionAdd: [],
             spd: 100,
-
             taunt: 100
-
         };
 
         /**
-         * 승급 스탯
-         */
-        this.ascensionStats = [];
-
-        /**
-         * 행동 정의
-         *
-         * key : actionId
-         * value : ActionDefinition
+         * key : actionId, value : ActionDefinition
          */
         this.actions = new Map();
 
         /**
-         * 행적
+         * 큰 행적 [{ id, name, unlockAscension }]
          */
-        this.traces = [];
+        this.majorTraces = [];
 
         /**
-         * 성혼
+         * 작은 행적 [{ id, stat, value, unlockAscension }]
          */
+        this.minorTraces = [];
+
         this.eidolons = [];
 
-        /**
-         * 태그
-         */
         this.tags = [];
 
     }
 
     registerAction(actionDefinition) {
-
         this.actions.set(actionDefinition.id, actionDefinition);
-
     }
 
     getAction(actionId) {
-
         return this.actions.get(actionId) ?? null;
+    }
 
+    /**
+     * 레벨 + 돌파 => 기본 HP/ATK/DEF/SPD
+     *
+     * value = base + growth * (level - 1) + ascensionAdd[ascension]
+     */
+    baseStatsAt(level, ascension) {
+
+        const add = this.stats.ascensionAdd[ascension]
+            ?? this.stats.ascensionAdd.at(-1)
+            ?? { hp: 0, atk: 0, def: 0 };
+
+        const scale = key =>
+            this.stats.base[key]
+            + this.stats.growth[key] * (level - 1)
+            + add[key];
+
+        return {
+            hp: scale("hp"),
+            atk: scale("atk"),
+            def: scale("def"),
+            spd: this.stats.spd,
+            taunt: this.stats.taunt
+        };
+
+    }
+
+    /**
+     * 해당 돌파에서 개방 가능한 작은 행적
+     */
+    availableMinorTraces(ascension) {
+        return this.minorTraces.filter(
+            trace => trace.unlockAscension <= ascension
+        );
+    }
+
+    availableMajorTraces(ascension) {
+        return this.majorTraces.filter(
+            trace => trace.unlockAscension <= ascension
+        );
     }
 
 }

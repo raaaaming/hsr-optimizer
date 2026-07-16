@@ -8,7 +8,11 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "check": "wrangler deploy --dry-run",
-    "tail": "wrangler tail"
+    "tail": "wrangler tail",
+    "db:create": "wrangler d1 create hsr-optimizer",
+    "db:migrate": "wrangler d1 migrations apply hsr-optimizer --local",
+    "db:migrate:remote": "wrangler d1 migrations apply hsr-optimizer --remote",
+    "db:console": "wrangler d1 execute hsr-optimizer --local --command"
   },
   "keywords": [
     "hsr",
