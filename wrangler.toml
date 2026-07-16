@@ -1,0 +1,11 @@
+name = "hsr-optimizer"
+main = "src/worker.js"
+compatibility_date = "2026-07-16"
+workers_dev = true
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[observability]
+enabled = true

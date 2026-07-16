@@ -1,0 +1,25 @@
+{
+  "name": "hsr-optimizer",
+  "version": "0.1.0",
+  "description": "Honkai: Star Rail Build Optimizer & Battle Simulator",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "wrangler deploy --dry-run",
+    "tail": "wrangler tail"
+  },
+  "keywords": [
+    "hsr",
+    "honkai",
+    "starrail",
+    "optimizer",
+    "cloudflare-workers"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^4.27.0"
+  }
+}
