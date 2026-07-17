@@ -56,6 +56,36 @@ export class Character {
         this.actions.set(actionDefinition.id, actionDefinition);
     }
 
+    /**
+     * 성흔을 감안한 스킬 레벨 상한.
+     *
+     * 성흔 중 일부는 특정 스킬의 레벨 상한을 올린다(대개 3성흔과 5성흔).
+     * 어느 스킬이 얼마나 오르는지는 eidolons[].skillAddLevelList에 있고
+     * 키는 Yatta의 원본 스킬 ID(ActionDefinition.skillId)다.
+     *
+     * 반디라면 6성흔에서 일반 7 / 스킬 12 / 필살기 12 / 특성 12가 된다.
+     *
+     * params 배열 길이로는 못 구한다. 배열이 실제 도달 가능한 상한보다
+     * 길다(일반 공격은 10칸인데 최대 7레벨이다).
+     */
+    maxSkillLevel(action, eidolon = 0) {
+
+        let bonus = 0;
+
+        for (const eidolonData of this.eidolons) {
+
+            const rank = Number(String(eidolonData.id).replace("e", ""));
+
+            if (!Number.isInteger(rank) || rank > eidolon) continue;
+
+            bonus += eidolonData.skillAddLevelList?.[action.skillId] ?? 0;
+
+        }
+
+        return action.maxLevel + bonus;
+
+    }
+
     getAction(actionId) {
         return this.actions.get(actionId) ?? null;
     }

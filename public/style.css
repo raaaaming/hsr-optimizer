@@ -239,6 +239,72 @@ button.link {
 
 .breakdown .plus { color: #7fe0a8; }
 
+/* ===== Hero (일러 + 스킬 + 광추) ===== */
+
+.hero {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+@media (min-width: 640px) {
+    .hero { grid-template-columns: 200px 1fr; align-items: start; }
+}
+
+.hero-art {
+    width: 100%;
+    height: auto;
+    border-radius: 10px;
+    background: var(--panel-2);
+    /* 일러가 세로로 길다. 위쪽(얼굴)을 남기고 아래를 자른다. */
+    aspect-ratio: 374 / 420;
+    object-fit: cover;
+    object-position: top center;
+}
+
+.hero-info { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
+.hero-skills { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.hero-skill { position: relative; }
+
+.hero-skill img {
+    display: block;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--row);
+    border: 1px solid var(--line);
+    padding: 3px;
+}
+
+.hero-skill .lv {
+    position: absolute;
+    right: -2px;
+    bottom: -3px;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 0 4px;
+    font-size: 9px;
+    color: var(--gold);
+    font-variant-numeric: tabular-nums;
+}
+
+.hero-lc .lc-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: var(--row);
+    border-radius: 8px;
+}
+
+.hero-lc img { border-radius: 6px; background: var(--panel-2); flex: none; }
+.hero-lc .lc-name { font-size: 12.5px; }
+.hero-lc .lc-sub { font-size: 11px; color: var(--muted); }
+
 /* ===== Sheet head ===== */
 
 .sheet-head {
@@ -338,7 +404,7 @@ button.link {
 
 .roll-list { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; }
 
-/* 굴림 하나. 누를 때마다 80 → 90 → 100% 로 돈다. */
+/* 굴림 하나. 누를 때마다 하 → 중 → 상 으로 돈다. */
 .roll {
     padding: 3px 5px;
     border-radius: 4px;
@@ -408,6 +474,15 @@ button.link {
 }
 
 .relic-card .rc-head .lv { font-size: 11px; color: #ffe0ac; }
+/* 부위 그림. 세트를 안 고르면 없다. */
+.relic-card .rc-icon {
+    flex: none;
+    margin-right: 6px;
+    border-radius: 5px;
+    background: rgba(0,0,0,.25);
+}
+/* 그림이 있든 없든 레벨은 오른쪽 끝에 붙는다. */
+.relic-card .rc-head .rc-slot { margin-right: auto; }
 .relic-card .rc-body { padding: 6px 10px 10px; }
 
 .rc-line {
@@ -439,3 +514,6 @@ button.link {
 }
 
 .foot p { margin: 0; }
+
+/* 스킬 레벨 상한 표시 */
+.field label .cap { color: var(--muted); font-size: 11px; }

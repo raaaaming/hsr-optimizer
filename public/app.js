@@ -89,6 +89,24 @@ const levelledActions = char => char.actions.filter((action, i, all) =>
 );
 
 /**
+ * 성흔을 감안한 스킬 레벨 상한. 서버 Character.maxSkillLevel()과 같은 계산이다.
+ *
+ * 성흔 일부가 특정 스킬의 상한을 올린다(대개 3성흔/5성흔). 어느 스킬이
+ * 얼마나 오르는지는 eidolons[].skillAddLevelList에 원본 스킬 ID로 들어있다.
+ */
+const maxSkillLevel = (char, action, eidolon) => {
+
+    const bonus = char.eidolons.reduce((sum, e) => {
+        const rank = Number(String(e.id).replace("e", ""));
+        if (!Number.isInteger(rank) || rank > eidolon) return sum;
+        return sum + (e.skillAddLevelList?.[action.skillId] ?? 0);
+    }, 0);
+
+    return action.maxLevel + bonus;
+
+};
+
+/**
  * 돌파가 허용하는 구간으로 레벨을 끌어당긴다.
  * 돌파는 상한만 여는 게 아니라 하한도 올린다(6돌파 => 70~80).
  */
@@ -170,17 +188,22 @@ function renderEditor() {
 
     // 스킬
     $("skills").replaceChildren(...levelledActions(char).map(action => {
+        const cap = maxSkillLevel(char, action, state.eidolon);
         const wrap = el("div", "field");
-        wrap.append(el("label", null, action.name));
+        wrap.append(el("label", null, `${action.name} <span class="cap">/${cap}</span>`));
         const input = el("input");
         Object.assign(input, {
             type: "number",
             min: 1,
-            max: action.maxLevel,
-            value: state.skills[action.levelKey] ?? action.maxLevel
+            max: cap,
+            value: Math.min(state.skills[action.levelKey] ?? cap, cap)
         });
+        // max 속성만으로는 직접 타이핑한 값을 못 막는다.
         input.oninput = () => {
-            state.skills[action.levelKey] = Number(input.value);
+            const typed = Number(input.value);
+            if (!Number.isFinite(typed)) return;
+            state.skills[action.levelKey] = Math.min(Math.max(typed, 1), cap);
+            if (typed > cap) input.value = cap;
             refresh();
         };
         wrap.append(input);
@@ -546,7 +569,60 @@ const effectiveRows = () => new Set(
     state.effectiveStats.map(key => META.stats[key]?.appliesTo ?? key)
 );
 
+/**
+ * 캐릭터 일러스트 + 스킬/광추 그림.
+ *
+ * 그림은 전부 우리 도메인에서 나온다(public/img). scripts/sync-images.js가
+ * 빌드 타임에 받아둔 것이라 런타임에 Yatta를 부르지 않는다.
+ */
+function renderHero(char, data) {
+
+    const art = $("heroArt");
+    art.src = `/img/portrait/${char.icon}.png`;
+    art.alt = data.character.name;
+
+    // 레벨을 올릴 수 있는 스킬만. 강화판은 원본과 그림이 달라 따로 보여준다.
+    $("heroSkills").replaceChildren(...levelledActions(char).map(action => {
+        const cap = maxSkillLevel(char, action, state.eidolon);
+        const level = Math.min(state.skills[action.levelKey] ?? cap, cap);
+
+        const item = el("div", "hero-skill");
+        item.title = `${action.name} Lv.${level}/${cap}`;
+
+        const icon = el("img");
+        Object.assign(icon, {
+            src: `/img/skill/${action.icon}.png`,
+            alt: action.name, loading: "lazy", width: 34, height: 34
+        });
+
+        item.append(icon, el("span", "lv", `${level}`));
+        return item;
+    }));
+
+    const lightCone = META.lightCones.find(lc => lc.id === state.lightCone.id);
+
+    $("heroLightCone").replaceChildren(...(lightCone ? [(() => {
+        const row = el("div", "lc-row");
+        const icon = el("img");
+        Object.assign(icon, {
+            src: `/img/lightcone/${lightCone.id}.png`,
+            alt: lightCone.name, loading: "lazy", width: 44, height: 44
+        });
+        const text = el("div");
+        text.append(
+            el("div", "lc-name", lightCone.name),
+            el("div", "lc-sub",
+                `Lv.${state.lightCone.level} · 중첩 ${state.lightCone.superimposition}단계`)
+        );
+        row.append(icon, text);
+        return row;
+    })()] : []));
+
+}
+
 function renderSheet(data) {
+    const char = character();
+
     $("sheetName").textContent = data.character.name;
     $("sheetLevel").textContent = `Lv.${data.level}`;
 
@@ -556,6 +632,8 @@ function renderSheet(data) {
         el("span", "tag", `${data.ascension}돌파`),
         el("span", "tag", `${data.eidolon}성혼`)
     );
+
+    renderHero(char, data);
 
     // 우측: 원소 피해 + 나머지 비율 스탯
     const dmgKey = `${data.character.element}Dmg`;
@@ -642,8 +720,22 @@ function renderRelicCards() {
 
         const card = el("div", "relic-card");
         const head = el("div", "rc-head");
-        head.innerHTML =
-            `<span>${slot.label}</span><span class="lv">+${relic.level}</span>`;
+
+        // 부위 그림은 세트마다 다르다. 세트를 안 고른 유물은 그림이 없다.
+        const piece = META.relicSets[relic.set]?.pieces?.[slot.id];
+
+        if (piece?.icon) {
+            const icon = el("img", "rc-icon");
+            Object.assign(icon, {
+                src: `/img/relic/${piece.icon}.png`,
+                alt: piece.name, title: piece.name, loading: "lazy",
+                width: 28, height: 28
+            });
+            head.append(icon);
+        }
+
+        head.append(el("span", "rc-slot", slot.label));
+        head.append(el("span", "lv", `+${relic.level}`));
         card.append(head);
 
         const body = el("div", "rc-body");
@@ -792,7 +884,21 @@ async function init() {
         refresh();
     };
 
-    $("eidolon").onchange = e => { state.eidolon = Number(e.target.value); refresh(); };
+    $("eidolon").onchange = e => {
+        state.eidolon = Number(e.target.value);
+        // 성흔이 스킬 레벨 상한을 정한다. 성흔을 내리면 상한도 내려가므로
+        // 이미 올려둔 레벨을 같이 끌어내린다.
+        const char = character();
+        for (const action of levelledActions(char)) {
+            const cap = maxSkillLevel(char, action, state.eidolon);
+            state.skills[action.levelKey] = Math.min(
+                state.skills[action.levelKey] ?? cap,
+                cap
+            );
+        }
+        renderEditor();
+        refresh();
+    };
 
     $("ascension").onchange = e => {
         state.ascension = Number(e.target.value);

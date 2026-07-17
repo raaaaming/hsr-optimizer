@@ -165,7 +165,57 @@ check(
     !(await page.locator("#statGrid .stat-row.hi .k").allTextContents()).includes("속도")
 );
 
-// 9) 6돌파에서 레벨 하한
+// 9) 그림이 다 뜬다
+const broken = await page.evaluate(() =>
+    [...document.images]
+        .filter(img => img.src && (!img.complete || img.naturalWidth === 0))
+        .map(img => img.src.split("/img/")[1] ?? img.src)
+);
+
+check("깨진 그림이 없다", broken.length === 0, broken.slice(0, 3).join(", "));
+
+check("캐릭터 일러가 뜬다",
+    await page.locator("#heroArt").evaluate(n => n.naturalWidth > 0));
+
+check("스킬 아이콘이 뜬다",
+    await page.locator("#heroSkills img").count() > 0);
+
+// 10) 스킬 레벨은 상한을 넘을 수 없다
+await page.selectOption("#eidolon", "0");
+await page.waitForTimeout(500);
+
+const basic = page.locator("#skills input").first();
+
+check("E0 일반 공격 상한은 6",
+    await basic.getAttribute("max") === "6",
+    `max=${await basic.getAttribute("max")}`);
+
+await basic.fill("99");
+await page.waitForTimeout(400);
+
+check("상한을 넘겨 입력하면 상한으로 잘린다",
+    await basic.inputValue() === "6",
+    `실제 ${await basic.inputValue()}`);
+
+// 성흔을 올리면 상한도 올라간다
+await page.selectOption("#eidolon", "3");
+await page.waitForTimeout(600);
+
+check("E3에서 일반 공격 상한이 7로 오른다",
+    await page.locator("#skills input").first().getAttribute("max") === "7",
+    `max=${await page.locator("#skills input").first().getAttribute("max")}`);
+
+// 성흔을 내리면 올려둔 레벨이 같이 내려온다
+await page.locator("#skills input").first().fill("7");
+await page.waitForTimeout(300);
+await page.selectOption("#eidolon", "0");
+await page.waitForTimeout(600);
+
+check("성흔을 내리면 레벨도 상한까지 내려온다",
+    await page.locator("#skills input").first().inputValue() === "6",
+    `실제 ${await page.locator("#skills input").first().inputValue()}`);
+
+// 11) 6돌파에서 레벨 하한
 await page.selectOption("#ascension", "6");
 await page.waitForTimeout(200);
 check(

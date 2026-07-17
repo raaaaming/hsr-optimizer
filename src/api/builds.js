@@ -244,13 +244,38 @@ function pickBuildInput(body) {
 
             const skills = {};
 
+            // 상한은 캐릭터와 성흔에 따라 다르다(반디 6성흔이면 일반 7 / 스킬 12).
+            // 캐릭터를 모르면 형식만 보고 넘어간다.
+            const character = characterRegistry.get(body.character);
+
+            const caps = new Map();
+
+            for (const action of character?.actions.values() ?? []) {
+                if (action.maxLevel <= 1) continue;
+                caps.set(
+                    action.levelKey,
+                    character.maxSkillLevel(action, body.eidolon ?? 0)
+                );
+            }
+
             for (const [key, value] of Object.entries(body.skills)) {
 
-                if (!Number.isInteger(value) || value < 1 || value > 15) {
-                    errors.push(`skills.${key} must be an integer between 1 and 15.`);
-                } else {
-                    skills[key] = value;
+                const cap = caps.get(key);
+
+                if (!Number.isInteger(value) || value < 1) {
+                    errors.push(`skills.${key} must be an integer of at least 1.`);
+                    continue;
                 }
+
+                if (cap !== undefined && value > cap) {
+                    errors.push(
+                        `skills.${key} ${value} exceeds the cap ${cap} ` +
+                        `for eidolon ${body.eidolon ?? 0}.`
+                    );
+                    continue;
+                }
+
+                skills[key] = value;
 
             }
 
