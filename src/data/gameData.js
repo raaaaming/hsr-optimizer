@@ -111,7 +111,7 @@ export const SUBSTAT_KEYS = [
 ];
 
 /**
- * 5성 부옵션 1회 굴림 최대치. 명중 횟수 추정에 쓴다.
+ * 5성 부옵션 1회 굴림 최대치.
  */
 export const SUBSTAT_ROLL = {
     hp: 42.34, atk: 21.17, def: 21.17, spd: 2.6,
@@ -120,4 +120,66 @@ export const SUBSTAT_ROLL = {
     breakEffect: 0.0648, effectHitRate: 0.0432, effectRes: 0.0432
 };
 
+/**
+ * 부옵션 굴림 등급.
+ *
+ * 실제 게임은 부옵션이 붙거나 강화될 때마다 최대치의 80% / 90% / 100% 중
+ * 하나가 굴려져 더해진다. 그래서 부옵션 값은 임의의 수가 아니라
+ * 이 세 값의 합으로만 나올 수 있다.
+ */
+export const SUBSTAT_ROLL_TIERS = [0.8, 0.9, 1.0];
+
+/**
+ * 굴림 목록 => 실제 부옵션 값.
+ * rolls는 SUBSTAT_ROLL_TIERS의 인덱스 배열이다. 첫 굴림이 초기값이고
+ * 나머지는 강화하면서 그 부옵션이 선택될 때마다 붙은 것이다.
+ */
+export function substatValue(key, rolls) {
+
+    const unit = SUBSTAT_ROLL[key];
+
+    if (!unit || !Array.isArray(rolls)) return 0;
+
+    return rolls.reduce(
+        (sum, tier) => sum + unit * (SUBSTAT_ROLL_TIERS[tier] ?? 1),
+        0
+    );
+
+}
+
+/**
+ * 유물 강화로 부옵션이 굴려지는 횟수. 3레벨마다 1회다(+15면 5회).
+ */
+export function upgradeRolls(level) {
+
+    return Math.floor((level ?? 0) / 3);
+
+}
+
+/**
+ * 부옵션 굴림 총합의 상한.
+ * 초기 부옵션 4개 + 강화 굴림. 5성 +15면 4 + 5 = 9회다.
+ */
+export function maxTotalRolls(level) {
+
+    return 4 + upgradeRolls(level);
+
+}
+
+/** 부옵션 하나에 몰아줄 수 있는 최대 굴림 수 (초기 1 + 강화 5) */
+export const MAX_ROLLS_PER_SUBSTAT = 6;
+
+/** 유효 옵션 선택 개수 */
+export const MIN_EFFECTIVE_STATS = 1;
+export const MAX_EFFECTIVE_STATS = 5;
+
 export const MAX_LEVEL_BY_ASCENSION = [20, 30, 40, 50, 60, 70, 80];
+
+/**
+ * 돌파별 레벨 하한.
+ *
+ * 돌파를 하면 그 아래 레벨로는 내려갈 수 없다.
+ * 6돌파 70~80, 5돌파 60~70, 4돌파 50~60, 3돌파 40~50,
+ * 2돌파 30~40, 1돌파 20~30, 0돌파 1~20.
+ */
+export const MIN_LEVEL_BY_ASCENSION = [1, 20, 30, 40, 50, 60, 70];

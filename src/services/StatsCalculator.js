@@ -1,8 +1,8 @@
 import {
     STATS,
     RELIC_MAIN_STATS,
-    SUBSTAT_ROLL,
-    relicMainValue
+    relicMainValue,
+    substatValue
 } from "../data/gameData.js";
 
 import { lightConeRegistry, relicSetRegistry } from "../registry/index.js";
@@ -170,9 +170,9 @@ export class StatsCalculator {
                 add(relic.mainStat, relicMainValue(max, relic.level ?? 15));
             }
 
-            // 부옵션은 굴림값이라 입력값을 그대로 더한다.
+            // 부옵션 값은 굴림의 합이다.
             for (const sub of relic.substats ?? []) {
-                add(sub.key, sub.value);
+                add(sub.key, substatValue(sub.key, sub.rolls));
             }
 
         }
@@ -245,18 +245,24 @@ export class StatsCalculator {
      */
     countRolls(build) {
 
+        // 유효 옵션으로 고른 것만 센다. 어떤 부옵션이 유효한지는
+        // 캐릭터마다 달라서 사용자가 직접 고른다.
+        const effective = new Set(build.effectiveStats ?? []);
+
         const rolls = {};
+
+        for (const key of effective) {
+            rolls[key] = 0;
+        }
 
         for (const relic of build.relics ?? []) {
 
             for (const sub of relic.substats ?? []) {
 
-                const unit = SUBSTAT_ROLL[sub.key];
+                if (!effective.has(sub.key)) continue;
 
-                if (!unit) continue;
-
-                rolls[sub.key] = (rolls[sub.key] ?? 0)
-                    + Math.round(sub.value / unit);
+                // 값에서 역산하지 않는다. 굴림 횟수가 곧 명중 횟수다.
+                rolls[sub.key] += sub.rolls?.length ?? 0;
 
             }
 

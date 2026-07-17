@@ -26,6 +26,7 @@ export class BuildRepository extends BaseRepository {
             { prop: "lightCone", column: "light_cone", json: true },
             { prop: "relics",    column: "relics",     json: true },
             { prop: "stats",     column: "stats",      json: true },
+            { prop: "effectiveStats", column: "effective_stats", json: true },
             { prop: "memo",      column: "memo" },
             { prop: "createdAt", column: "created_at" },
             { prop: "updatedAt", column: "updated_at" }

@@ -5,11 +5,18 @@ import {
     RELIC_SLOTS,
     RELIC_MAIN_STATS,
     SUBSTAT_KEYS,
-    MAX_LEVEL_BY_ASCENSION
+    SUBSTAT_ROLL,
+    SUBSTAT_ROLL_TIERS,
+    MAX_ROLLS_PER_SUBSTAT,
+    MIN_EFFECTIVE_STATS,
+    MAX_EFFECTIVE_STATS,
+    MAX_LEVEL_BY_ASCENSION,
+    MIN_LEVEL_BY_ASCENSION
 } from "../data/gameData.js";
 
 import { LIGHT_CONE_PASSIVES } from "../data/lightConePassives.js";
 import { RELIC_SET_EFFECTS } from "../data/relicSetEffects.js";
+import { defaultEffectiveStats } from "../data/effectiveStats.js";
 
 import {
     characterRegistry,
@@ -52,7 +59,17 @@ export async function handler(request) {
             ])
         ),
         substatKeys: SUBSTAT_KEYS,
+
+        // 부옵션 굴림. UI가 서버와 같은 기준으로 값을 보여줘야 한다.
+        substatRoll: SUBSTAT_ROLL,
+        substatRollTiers: SUBSTAT_ROLL_TIERS,
+        maxRollsPerSubstat: MAX_ROLLS_PER_SUBSTAT,
+
+        minEffectiveStats: MIN_EFFECTIVE_STATS,
+        maxEffectiveStats: MAX_EFFECTIVE_STATS,
+
         maxLevelByAscension: MAX_LEVEL_BY_ASCENSION,
+        minLevelByAscension: MIN_LEVEL_BY_ASCENSION,
 
         characters: characterRegistry.getAll().map(character => ({
             id: character.id,
@@ -69,7 +86,10 @@ export async function handler(request) {
             })),
             majorTraces: character.majorTraces,
             minorTraces: character.minorTraces,
-            eidolons: character.eidolons
+            eidolons: character.eidolons,
+            // 새 빌드의 유효 옵션 초기값. 서버가 생성 시 쓰는 것과 같은 값이라
+            // 화면에 보이던 게 저장하는 순간 바뀌지 않는다.
+            defaultEffectiveStats: defaultEffectiveStats(character)
         })),
 
         lightCones: lightConeRegistry.getAll().map(lightCone => ({

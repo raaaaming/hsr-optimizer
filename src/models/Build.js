@@ -73,7 +73,12 @@ export class Build {
 
         /**
          * 유물 6부위
-         * { slot, set, level, mainStat, substats:[{ key, value }] }
+         *
+         * { slot, set, level, mainStat, substats: [{ key, rolls }] }
+         *
+         * rolls는 굴림 등급(0=80% / 1=90% / 2=100%) 배열이다.
+         * 값을 직접 저장하지 않는 이유는 실제 게임의 부옵션이 임의의 수가 아니라
+         * 굴림의 합으로만 나오기 때문이다. 값은 substatValue()로 유도한다.
          */
         this.relics = [];
 
@@ -81,6 +86,14 @@ export class Build {
          * 사용자가 직접 덮어쓰는 스탯(선택)
          */
         this.stats = {};
+
+        /**
+         * 유효 부옵션 (1~5개).
+         *
+         * 캐릭터마다 다르고 게임처럼 추천해줄 데이터가 없어 사용자가 고른다.
+         * 유효 부옵션 명중 통계가 이 목록만 집계한다.
+         */
+        this.effectiveStats = [];
 
         this.memo = "";
 

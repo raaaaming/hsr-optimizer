@@ -19,18 +19,17 @@ const api = async (path, options) => {
 
 const isPercent = key => META.stats[key]?.percent === true;
 
-/** 내부 저장은 0~1 비율, 화면은 % */
-const toDisplay = (key, value) =>
-    isPercent(key) ? value * 100 : value;
-
-const toInternal = (key, value) =>
-    isPercent(key) ? value / 100 : value;
-
 const fmt = (key, value) => {
     if (value === undefined || value === null) return "—";
-    return isPercent(key)
-        ? `${(value * 100).toFixed(1)}%`
-        : Math.round(value).toLocaleString("ko-KR");
+
+    if (isPercent(key)) return `${(value * 100).toFixed(1)}%`;
+
+    // 속도는 반올림하면 안 된다. 행동 순서가 갈리는 구간(134.4 등)이
+    // 소수점에서 정해지는데, 부옵션 1굴림이 2.6이라 3으로 보여주면
+    // 실제로는 못 넘는 구간을 넘은 것처럼 보인다.
+    if (key === "spd") return value.toFixed(1);
+
+    return Math.round(value).toLocaleString("ko-KR");
 };
 
 const label = key => META.stats[key]?.label ?? key;
@@ -73,6 +72,15 @@ const levelledActions = char => char.actions.filter((action, i, all) =>
     all.findIndex(a => a.levelKey === action.levelKey) === i
 );
 
+/**
+ * 돌파가 허용하는 구간으로 레벨을 끌어당긴다.
+ * 돌파는 상한만 여는 게 아니라 하한도 올린다(6돌파 => 70~80).
+ */
+const clampLevel = (level, ascension) => Math.min(
+    Math.max(level, META.minLevelByAscension[ascension]),
+    META.maxLevelByAscension[ascension]
+);
+
 function newBuild(characterId = defaultCharacter().id) {
     const char = META.characters.find(c => c.id === characterId);
     return {
@@ -93,6 +101,8 @@ function newBuild(characterId = defaultCharacter().id) {
         },
         lightCone: { id: null, level: 80, ascension: 6, superimposition: 1 },
         relics: [],
+        // 서버가 생성 시 채우는 것과 같은 값이라 저장해도 안 바뀐다.
+        effectiveStats: [...char.defaultEffectiveStats],
         stats: {},
         memo: ""
     };
@@ -108,8 +118,21 @@ function setRelic(slot, patch) {
         state.relics.push(relic);
     }
     Object.assign(relic, patch);
-    // 주옵션 없는 유물은 서버 검증에서 막히므로 제거한다.
-    state.relics = state.relics.filter(r => r.mainStat);
+    return relic;
+}
+
+/**
+ * 서버로 보낼 형태.
+ *
+ * 주옵션이 없는 유물은 서버 검증에서 막히므로 여기서 뺀다.
+ * 편집 중에는 남겨둬야 한다. 세트를 먼저 고르고 주옵션을 나중에 고르는 건
+ * 자연스러운 순서인데, 상태에서 지워버리면 방금 고른 세트가 사라진다.
+ */
+function toPayload() {
+    return {
+        ...state,
+        relics: state.relics.filter(relic => relic.mainStat)
+    };
 }
 
 // ===== 편집 렌더 =====
@@ -121,8 +144,13 @@ function renderEditor() {
     $("characterSelect").value = state.character;
     $("eidolon").value = state.eidolon;
     $("ascension").value = state.ascension;
-    $("level").value = state.level;
-    $("levelCap").textContent = `(최대 ${META.maxLevelByAscension[state.ascension]})`;
+
+    // 돌파는 상한만 여는 게 아니라 하한도 같이 올린다(6돌파 => 70~80).
+    const floor = META.minLevelByAscension[state.ascension];
+    const cap = META.maxLevelByAscension[state.ascension];
+
+    Object.assign($("level"), { min: floor, max: cap, value: state.level });
+    $("levelCap").textContent = `(${floor}~${cap})`;
 
     // 스킬
     $("skills").replaceChildren(...levelledActions(char).map(action => {
@@ -196,13 +224,140 @@ function renderEditor() {
     $("lcLevel").value = state.lightCone.level;
     $("lcSuper").value = state.lightCone.superimposition;
 
+    renderEffectiveStats();
     renderRelicEditor();
 }
 
+/**
+ * 유효 옵션 선택.
+ *
+ * 어떤 부옵션이 유효한지는 캐릭터마다 다르다. 게임은 추천해주지만 우리에겐
+ * 그 데이터가 없어서 직접 고른다. 명중 통계가 이 목록만 집계한다.
+ */
+function renderEffectiveStats() {
+
+    const min = META.minEffectiveStats;
+    const max = META.maxEffectiveStats;
+
+    $("effectiveHint").textContent = `${state.effectiveStats.length}/${max} (최소 ${min})`;
+
+    $("effectiveStats").replaceChildren(...META.substatKeys.map(key => {
+
+        const on = state.effectiveStats.includes(key);
+
+        const chip = el("label", `chip${on ? " on" : ""}`, label(key));
+
+        chip.onclick = () => {
+
+            if (on) {
+                if (state.effectiveStats.length <= min) {
+                    return toast(`유효 옵션은 최소 ${min}개입니다.`, true);
+                }
+                state.effectiveStats = state.effectiveStats.filter(k => k !== key);
+            } else {
+                if (state.effectiveStats.length >= max) {
+                    return toast(`유효 옵션은 최대 ${max}개입니다.`, true);
+                }
+                state.effectiveStats = [...state.effectiveStats, key];
+            }
+
+            renderEffectiveStats();
+            refresh();
+
+        };
+
+        return chip;
+
+    }));
+
+}
+
+/** 이 유물이 쓴 굴림 총합 */
+const rollsUsed = relic =>
+    (relic?.substats ?? []).reduce((sum, sub) => sum + (sub.rolls?.length ?? 0), 0);
+
+/** 강화 레벨이 허용하는 굴림 총합 (초기 4개 + 3레벨마다 1회) */
+const maxTotalRolls = level => 4 + Math.floor((level ?? 0) / 3);
+
+/** 굴림 목록 => 실제 값. 서버의 substatValue()와 같은 계산이다. */
+const substatValue = (key, rolls) => {
+    const unit = META.substatRoll[key];
+    if (!unit || !rolls) return 0;
+    return rolls.reduce(
+        (sum, tier) => sum + unit * (META.substatRollTiers[tier] ?? 1), 0
+    );
+};
+
+/**
+ * 굴림 편집기.
+ *
+ * 실제 게임의 부옵션은 아무 수나 나오는 게 아니라, 붙거나 강화될 때마다
+ * 최대치의 80/90/100% 중 하나가 굴려져 쌓인다. 그래서 값을 직접 적는 대신
+ * 굴림을 하나씩 넣고 등급을 고른다. 값은 거기서 유도된다.
+ */
+function renderRolls(slotId, index, sub, used, cap) {
+
+    const wrap = el("div", "roll-list");
+
+    const commit = mutate => {
+        const target = relicFor(slotId);
+        const next = [...target.substats];
+        next[index] = { ...next[index], rolls: mutate([...next[index].rolls]) };
+        target.substats = next;
+        renderRelicEditor();
+        refresh();
+    };
+
+    sub.rolls.forEach((tier, r) => {
+        const chip = el("button", "roll");
+        chip.type = "button";
+        chip.textContent = `${Math.round(META.substatRollTiers[tier] * 100)}%`;
+        chip.title = r === 0 ? "초기값" : `강화 ${r}회차`;
+        if (r === 0) chip.classList.add("initial");
+        // 클릭할 때마다 80 → 90 → 100 → 80 으로 돈다.
+        chip.onclick = () => commit(rolls => {
+            rolls[r] = (rolls[r] + 1) % META.substatRollTiers.length;
+            return rolls;
+        });
+        wrap.append(chip);
+    });
+
+    const minus = el("button", "roll-btn");
+    minus.type = "button";
+    minus.textContent = "−";
+    minus.title = "굴림 제거";
+    minus.disabled = sub.rolls.length <= 1;
+    minus.onclick = () => commit(rolls => rolls.slice(0, -1));
+
+    const plus = el("button", "roll-btn");
+    plus.type = "button";
+    plus.textContent = "+";
+    plus.title = "강화 굴림 추가";
+    plus.disabled = used >= cap || sub.rolls.length >= META.maxRollsPerSubstat;
+    plus.onclick = () => commit(rolls => [...rolls, 2]);
+
+    const total = el("span", "roll-value",
+        fmt(sub.key, substatValue(sub.key, sub.rolls))
+    );
+
+    wrap.append(minus, plus, total);
+
+    return wrap;
+
+}
+
 function renderRelicEditor() {
+    // 다시 그려도 열어둔 부위는 열린 채로 둔다.
+    // 안 그러면 주옵션 하나 고를 때마다 상자가 닫힌다.
+    const open = new Set(
+        [...$("relics").querySelectorAll("details[open]")].map(node => node.dataset.slot)
+    );
+
     $("relics").replaceChildren(...META.relicSlots.map(slot => {
         const relic = relicFor(slot.id);
         const box = el("details", "relic-box");
+        box.dataset.slot = slot.id;
+        box.open = open.has(slot.id);
 
         const summary = el("summary");
         summary.innerHTML = `<span>${slot.label}</span><span class="sum">${
@@ -250,11 +405,9 @@ function renderRelicEditor() {
         }
         mainSelect.value = relic?.mainStat ?? "";
         mainSelect.onchange = () => {
-            if (!mainSelect.value) {
-                state.relics = state.relics.filter(r => r.slot !== slot.id);
-            } else {
-                setRelic(slot.id, { mainStat: mainSelect.value });
-            }
+            // 주옵션을 비워도 유물을 지우지 않는다. 세트나 부옵션을 먼저
+            // 넣어둔 게 통째로 날아가면 안 된다. 서버로 보낼 때만 걸러진다.
+            setRelic(slot.id, { mainStat: mainSelect.value || null });
             renderRelicEditor();
             refresh();
         };
@@ -266,15 +419,27 @@ function renderRelicEditor() {
         const lvInput = el("input");
         Object.assign(lvInput, { type: "number", min: 0, max: 15, value: relic?.level ?? 15 });
         lvInput.oninput = () => {
-            setRelic(slot.id, { level: Number(lvInput.value) });
+            setRelic(slot.id, {
+                level: Math.min(Math.max(Number(lvInput.value) || 0, 0), 15)
+            });
             refresh();
         };
+        // 강화 레벨이 굴림 상한을 정하므로 입력이 끝나면 다시 그린다.
+        // (입력 중에 그리면 포커스가 날아간다)
+        lvInput.onchange = () => renderRelicEditor();
         lvField.append(lvInput);
         row.append(lvField);
         box.append(row);
 
         // 부옵션 4개
-        box.append(el("label", "hint", "부 옵션 (실제 유물 수치를 입력)"));
+        const used = rollsUsed(relic);
+        const cap = maxTotalRolls(relic?.level ?? 15);
+
+        box.append(el("label", "hint",
+            `부 옵션 — 굴림 ${used}/${cap}회 ` +
+            `(초기값 1회 + 강화 시 선택될 때마다 1회)`
+        ));
+
         for (let i = 0; i < 4; i++) {
             const sub = relic?.substats?.[i];
             const subRow = el("div", "sub-row");
@@ -286,36 +451,45 @@ function renderRelicEditor() {
             for (const key of META.substatKeys) {
                 const option = el("option", null, label(key));
                 option.value = key;
+                // 한 유물에 같은 부옵션이 두 번 붙지 않는다.
+                option.disabled = key !== sub?.key
+                    && (relic?.substats ?? []).some(s => s.key === key);
                 keySelect.append(option);
             }
             keySelect.value = sub?.key ?? "";
 
-            const valueInput = el("input");
-            Object.assign(valueInput, {
-                type: "number", step: "0.1", min: 0,
-                value: sub ? Number(toDisplay(sub.key, sub.value).toFixed(2)) : ""
-            });
-            valueInput.placeholder = sub && isPercent(sub.key) ? "%" : "값";
-
-            const commit = () => {
-                const target = relicFor(slot.id);
-                if (!target) return;
-                const key = keySelect.value;
-                const raw = Number(valueInput.value);
+            keySelect.onchange = () => {
+                const target = setRelic(slot.id, {});
                 const next = [...(target.substats ?? [])];
-                if (!key || !valueInput.value) {
-                    next[i] = null;
+
+                if (!keySelect.value) {
+                    next.splice(i, 1);
+                } else if (next[i]) {
+                    // 부옵션 종류만 바꾼다. 굴림은 그대로 둔다.
+                    next[i] = { ...next[i], key: keySelect.value };
                 } else {
-                    next[i] = { key, value: toInternal(key, raw) };
+                    // 빈 줄에서 골랐다. next[i] = ... 로 넣으면 앞이 빈
+                    // 희소 배열이 되고 JSON에 null이 섞여 서버가 거부한다.
+                    if (used >= cap) {
+                        keySelect.value = "";
+                        return toast(`+${relic?.level ?? 15} 유물의 굴림은 ${cap}회까지입니다.`, true);
+                    }
+                    // 부옵션이 붙는 순간 초기값 굴림 1회를 갖는다.
+                    // 값을 안 적었다고 선택이 취소되면 안 된다.
+                    next.push({ key: keySelect.value, rolls: [2] });
                 }
-                target.substats = next.filter(Boolean);
+
+                target.substats = next;
+                renderRelicEditor();
                 refresh();
             };
 
-            keySelect.onchange = () => { commit(); renderRelicEditor(); };
-            valueInput.oninput = commit;
+            subRow.append(keySelect);
 
-            subRow.append(keySelect, valueInput);
+            if (sub) {
+                subRow.append(renderRolls(slot.id, i, sub, used, cap));
+            }
+
             box.append(subRow);
         }
 
@@ -355,7 +529,10 @@ function renderSheet(data) {
         if (base !== undefined && !isPercent(key)) {
             const diff = value - base;
             const bd = el("span", "breakdown");
-            bd.innerHTML = `<span>${Math.round(base)}</span><span class="plus">+${Math.round(diff)}</span>`;
+            // fmt를 거쳐야 속도가 소수점을 유지한다.
+            bd.innerHTML =
+                `<span>${fmt(key, base)}</span>` +
+                `<span class="plus">+${fmt(key, diff)}</span>`;
             split.append(bd);
         }
         split.append(el("span", "v", fmt(key, value)));
@@ -388,26 +565,31 @@ function renderSheet(data) {
         : [el("p", "empty", "2세트 이상 착용한 세트가 없습니다.")]
     ));
 
-    // 명중 통계
-    const rollEntries = Object.entries(data.rolls).filter(([, n]) => n > 0);
+    // 명중 통계.
+    // 고른 유효 옵션은 0회여도 보여준다. 아직 안 붙었다는 것 자체가 정보고,
+    // 목록에서 사라지면 그 옵션을 고른 적 있는지조차 알 수 없다.
+    const rollEntries = Object.entries(data.rolls);
     const total = rollEntries.reduce((sum, [, n]) => sum + n, 0);
     $("rollTotal").textContent = total;
     $("rollList").replaceChildren(...(rollEntries.length
         ? rollEntries.map(([key, n]) => {
-            const chip = el("span", "chip readonly");
+            const chip = el("span", `chip readonly${n > 0 ? " on" : ""}`);
             chip.innerHTML = `${label(key)} <span class="n">${n}</span>`;
             return chip;
         })
-        : [el("p", "empty", "부 옵션을 입력하면 명중 횟수가 집계됩니다.")]
+        : [el("p", "empty", "유효 옵션을 고르면 명중 횟수가 집계됩니다.")]
     ));
 
     renderRelicCards();
 }
 
 function renderRelicCards() {
+    const effective = new Set(state.effectiveStats);
+
     const cards = META.relicSlots.map(slot => {
         const relic = relicFor(slot.id);
-        if (!relic) return null;
+        // 주옵션이 없는 유물은 아직 편집 중이라 결과에 넣지 않는다.
+        if (!relic?.mainStat) return null;
 
         const card = el("div", "relic-card");
         const head = el("div", "rc-head");
@@ -425,11 +607,12 @@ function renderRelicCards() {
         body.append(main);
 
         for (const sub of relic.substats) {
-            const rolls = Math.round(sub.value / (SUB_ROLL[sub.key] ?? Infinity));
-            const line = el("div", "rc-line");
+            // 굴림 횟수는 역산하지 않는다. 이제 그 자체가 데이터다.
+            const count = sub.rolls?.length ?? 0;
+            const line = el("div", `rc-line${effective.has(sub.key) ? " eff" : ""}`);
             line.innerHTML =
-                `<span>${label(sub.key)}${rolls > 1 ? `<span class="rolls">»${rolls}</span>` : ""}</span>` +
-                `<span class="v">${fmt(sub.key, sub.value)}</span>`;
+                `<span>${label(sub.key)}${count > 1 ? `<span class="rolls">»${count}</span>` : ""}</span>` +
+                `<span class="v">${fmt(sub.key, substatValue(sub.key, sub.rolls))}</span>`;
             body.append(line);
         }
 
@@ -443,8 +626,6 @@ function renderRelicCards() {
     ));
 }
 
-let SUB_ROLL = {};
-
 // ===== 서버 연동 =====
 
 let refreshTimer;
@@ -454,7 +635,7 @@ function refresh() {
     refreshTimer = setTimeout(async () => {
         const result = await api("/stats", {
             method: "POST",
-            body: JSON.stringify(state)
+            body: JSON.stringify(toPayload())
         });
         if (!result.success) return toast(result.message, true);
         renderSheet(result.data);
@@ -478,7 +659,7 @@ async function save() {
     const isUpdate = Boolean(currentId);
     const result = await api(isUpdate ? `/builds/${currentId}` : "/builds", {
         method: isUpdate ? "PUT" : "POST",
-        body: JSON.stringify(state)
+        body: JSON.stringify(toPayload())
     });
 
     if (!result.success) {
@@ -497,14 +678,6 @@ async function init() {
     META = meta.data;
 
     PASSIVE_READY = new Set(META.lightConePassivesReady ?? []);
-
-    // 명중 횟수 표시는 서버와 같은 기준을 쓴다.
-    SUB_ROLL = {
-        hp: 42.34, atk: 21.17, def: 21.17, spd: 2.6,
-        hpPct: 0.0432, atkPct: 0.0432, defPct: 0.054,
-        critRate: 0.0324, critDamage: 0.0648,
-        breakEffect: 0.0648, effectHitRate: 0.0432, effectRes: 0.0432
-    };
 
     // 95명을 한 줄로 늘어놓으면 못 찾는다. 운명별로 묶고 이름순으로 정렬한다.
     const byPath = new Map(Object.keys(META.paths).map(path => [path, []]));
@@ -540,7 +713,9 @@ async function init() {
     }));
 
     $("ascension").replaceChildren(...[0, 1, 2, 3, 4, 5, 6].map(n => {
-        const option = el("option", null, `${n}돌파 (Lv.${META.maxLevelByAscension[n]})`);
+        const option = el("option", null,
+            `${n}돌파 (Lv.${META.minLevelByAscension[n]}~${META.maxLevelByAscension[n]})`
+        );
         option.value = n;
         return option;
     }));
@@ -572,8 +747,8 @@ async function init() {
 
     $("ascension").onchange = e => {
         state.ascension = Number(e.target.value);
-        const cap = META.maxLevelByAscension[state.ascension];
-        if (state.level > cap) state.level = cap;
+        // 돌파를 올리면 하한도 같이 올라가므로 양쪽으로 끌어당긴다.
+        state.level = clampLevel(state.level, state.ascension);
         // 돌파가 내려가면 잠긴 행적은 자동으로 해제한다.
         const char = character();
         const allowed = new Set(
@@ -585,9 +760,18 @@ async function init() {
     };
 
     $("level").oninput = e => {
-        const cap = META.maxLevelByAscension[state.ascension];
-        state.level = Math.min(Number(e.target.value) || 1, cap);
-        if (Number(e.target.value) > cap) e.target.value = cap;
+        // 입력 중에는 하한으로 튕기지 않는다. 70을 지우고 65를 치려면
+        // 잠깐 6이 되는데 거기서 70으로 되돌리면 아무것도 못 친다.
+        const typed = Number(e.target.value);
+        if (!Number.isFinite(typed)) return;
+        state.level = Math.min(typed, META.maxLevelByAscension[state.ascension]);
+        refresh();
+    };
+
+    // 하한 보정은 입력이 끝난 뒤에 한다.
+    $("level").onblur = () => {
+        state.level = clampLevel(state.level, state.ascension);
+        renderEditor();
         refresh();
     };
 

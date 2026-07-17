@@ -3,9 +3,16 @@ import {
     RELIC_SLOTS,
     RELIC_MAIN_STATS,
     SUBSTAT_KEYS,
-    MAX_LEVEL_BY_ASCENSION
+    SUBSTAT_ROLL_TIERS,
+    MAX_ROLLS_PER_SUBSTAT,
+    MIN_EFFECTIVE_STATS,
+    MAX_EFFECTIVE_STATS,
+    MAX_LEVEL_BY_ASCENSION,
+    MIN_LEVEL_BY_ASCENSION,
+    maxTotalRolls
 } from "../data/gameData.js";
-import { relicSetRegistry } from "../registry/index.js";
+import { relicSetRegistry, characterRegistry } from "../registry/index.js";
+import { defaultEffectiveStats } from "../data/effectiveStats.js";
 import { getBody, getPagination } from "../util/http.js";
 import {
     success,
@@ -88,6 +95,14 @@ async function createBuild(repos, request) {
     }
 
     const build = Object.assign(new Build(), input.data);
+
+    // 유효 옵션은 최소 1개여야 하는데 새 빌드는 비어 있다.
+    // 고르지 않았으면 캐릭터에서 유추해 채워둔다(사용자가 바꿀 수 있다).
+    if (build.effectiveStats.length === 0) {
+        build.effectiveStats = defaultEffectiveStats(
+            characterRegistry.get(build.character)
+        );
+    }
 
     return success(await repos.builds.insert(build), "Created");
 
@@ -200,13 +215,19 @@ function pickBuildInput(body) {
 
     }
 
-    // 레벨은 돌파 상한을 넘을 수 없다.
+    // 레벨은 돌파가 허용하는 구간 안이어야 한다.
+    // 돌파를 하면 상한이 열리는 동시에 하한도 같이 올라간다(6돌파 => 70~80).
     if (data.level !== undefined && data.ascension !== undefined) {
 
         const cap = MAX_LEVEL_BY_ASCENSION[data.ascension];
+        const floor = MIN_LEVEL_BY_ASCENSION[data.ascension];
 
         if (data.level > cap) {
             errors.push(`level ${data.level} exceeds the cap ${cap} for ascension ${data.ascension}.`);
+        }
+
+        if (data.level < floor) {
+            errors.push(`level ${data.level} is below the floor ${floor} for ascension ${data.ascension}.`);
         }
 
     }
@@ -297,6 +318,32 @@ function pickBuildInput(body) {
 
     }
 
+    if (Object.hasOwn(body, "effectiveStats")) {
+
+        const list = body.effectiveStats;
+
+        if (!Array.isArray(list)) {
+            errors.push("effectiveStats must be an array.");
+        } else if (
+            list.length < MIN_EFFECTIVE_STATS ||
+            list.length > MAX_EFFECTIVE_STATS
+        ) {
+            errors.push(
+                `effectiveStats must have ${MIN_EFFECTIVE_STATS} to ` +
+                `${MAX_EFFECTIVE_STATS} entries.`
+            );
+        } else if (list.some(key => !SUBSTAT_KEYS.includes(key))) {
+            errors.push(
+                `effectiveStats must contain only substat keys: ${SUBSTAT_KEYS.join(", ")}`
+            );
+        } else if (new Set(list).size !== list.length) {
+            errors.push("effectiveStats must not contain duplicates.");
+        } else {
+            data.effectiveStats = [...list];
+        }
+
+    }
+
     if (Object.hasOwn(body, "memo")) {
 
         if (typeof body.memo !== "string") {
@@ -366,6 +413,8 @@ function pickRelics(source, errors) {
 
         const substats = [];
 
+        const seenKeys = new Set();
+
         for (const [i, sub] of (relic.substats ?? []).entries()) {
 
             if (!SUBSTAT_KEYS.includes(sub?.key)) {
@@ -373,17 +422,59 @@ function pickRelics(source, errors) {
                 continue;
             }
 
-            if (typeof sub.value !== "number" || sub.value < 0) {
-                errors.push(`relics[${index}].substats[${i}].value must be a non-negative number.`);
+            if (seenKeys.has(sub.key)) {
+                errors.push(`relics[${index}].substats[${i}]: duplicate substat '${sub.key}'.`);
                 continue;
             }
 
-            substats.push({ key: sub.key, value: sub.value });
+            seenKeys.add(sub.key);
+
+            // 값이 아니라 굴림 목록을 받는다. 실제 게임의 부옵션은
+            // 최대치의 80/90/100% 굴림이 쌓여서 만들어진다.
+            if (
+                !Array.isArray(sub.rolls) ||
+                sub.rolls.length < 1 ||
+                sub.rolls.length > MAX_ROLLS_PER_SUBSTAT
+            ) {
+                errors.push(
+                    `relics[${index}].substats[${i}].rolls must have 1 to ` +
+                    `${MAX_ROLLS_PER_SUBSTAT} entries.`
+                );
+                continue;
+            }
+
+            const badTier = sub.rolls.some(
+                tier => !Number.isInteger(tier) || tier < 0 || tier >= SUBSTAT_ROLL_TIERS.length
+            );
+
+            if (badTier) {
+                errors.push(
+                    `relics[${index}].substats[${i}].rolls must contain integers ` +
+                    `between 0 and ${SUBSTAT_ROLL_TIERS.length - 1}.`
+                );
+                continue;
+            }
+
+            substats.push({ key: sub.key, rolls: [...sub.rolls] });
 
         }
 
         if (substats.length > 4) {
             errors.push(`relics[${index}] can have at most 4 substats.`);
+            return;
+        }
+
+        // 굴림 총합은 강화 레벨이 허용하는 만큼만 나올 수 있다.
+        // 초기 부옵션 4개 + 3레벨마다 1회 => +15면 최대 9회다.
+        const totalRolls = substats.reduce((sum, sub) => sum + sub.rolls.length, 0);
+
+        const rollCap = maxTotalRolls(level);
+
+        if (totalRolls > rollCap) {
+            errors.push(
+                `relics[${index}]: total substat rolls ${totalRolls} exceed ` +
+                `${rollCap} for level ${level}.`
+            );
             return;
         }
 

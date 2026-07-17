@@ -326,7 +326,59 @@ button.link {
 .relic-box > summary .sum { color: var(--muted); font-size: 11px; font-weight: 400; }
 .relic-box[open] > summary { margin-bottom: 10px; }
 
-.sub-row { display: grid; grid-template-columns: 1.4fr 1fr; gap: 8px; margin-bottom: 6px; }
+.sub-row {
+    display: grid;
+    grid-template-columns: 1.3fr 1.7fr;
+    gap: 8px;
+    margin-bottom: 6px;
+    align-items: center;
+}
+
+/* ===== 부옵션 굴림 ===== */
+
+.roll-list { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; }
+
+/* 굴림 하나. 누를 때마다 80 → 90 → 100% 로 돈다. */
+.roll {
+    padding: 3px 5px;
+    border-radius: 4px;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--muted);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    min-width: 34px;
+}
+
+.roll:hover { border-color: var(--gold-dim); color: var(--gold-dim); }
+
+/* 초기값 굴림. 나머지는 강화로 붙은 것이다. */
+.roll.initial { border-style: dashed; }
+
+.roll-btn {
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.roll-btn:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
+.roll-btn:disabled { opacity: .3; cursor: default; }
+
+.roll-value {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--gold-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+.hint-inline { color: var(--muted); font-size: 11px; font-weight: 400; }
 
 /* ===== Relic cards ===== */
 
@@ -369,6 +421,9 @@ button.link {
 
 .rc-line:last-child { border-bottom: none; }
 .rc-line.main { color: var(--gold); font-weight: 600; }
+/* 유효 옵션으로 고른 부옵션 */
+.rc-line.eff { color: var(--text); }
+.rc-line.eff .v { color: var(--gold-dim); }
 .rc-line .v { font-variant-numeric: tabular-nums; }
 .rc-line .rolls { color: var(--muted); font-size: 10px; margin-left: 4px; }
 
