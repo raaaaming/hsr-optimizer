@@ -274,6 +274,9 @@ function toActions(mainSkills, enSkills, slug, who) {
                 name: skill.name ?? "",
                 formula: `${slug}.${id}`,
 
+                // UI/skill/{icon}.png. scripts/sync-images.js가 받아둔다.
+                icon: skill.icon ?? null,
+
                 // 손으로 쓴 공식이 없을 때 generic 공식이 읽는 값.
                 // params[n] = n번 자리표시자(#n)의 레벨별 배열.
                 params: skill.params ?? null,
@@ -317,6 +320,7 @@ function toTraces(subSkills, who) {
                 id,
                 name: node.name ?? "",
                 desc: node.description ?? "",
+                icon: node.icon ?? null,
                 unlockAscension
             });
 
@@ -366,7 +370,9 @@ function toEidolons(eidolons) {
             id: `e${eidolon.rank}`,
             name: eidolon.name ?? "",
             desc: eidolon.description ?? "",
+            icon: eidolon.icon ?? null,
             params: eidolon.params ?? null,
+            // 성흔이 올려주는 스킬 레벨. 키는 원본 스킬 ID다.
             skillAddLevelList: eidolon.skillAddLevelList ?? null
         }));
 
@@ -440,6 +446,22 @@ function transformLightCone(kr, slug, now) {
 const clean = text => text.replaceAll("\u00a0", " ");
 
 /**
+ * Yatta suite 키 => gameData.js의 RELIC_SLOTS 키.
+ *
+ * NECK/OBJECT가 헷갈리는데, 부위 이름을 보면 알 수 있다.
+ * 우주 봉인 정거장의 NECK은 「헤르타」의 우주정거장(차원 구체),
+ * OBJECT는 「헤르타」의 궤적(연결 매듭)이다.
+ */
+const SUITE_SLOT_MAP = {
+    HEAD: "head",
+    HAND: "hands",
+    BODY: "body",
+    FOOT: "feet",
+    NECK: "sphere",
+    OBJECT: "rope"
+};
+
+/**
  * 유물 세트.
  *
  * skillList는 세트 개수("2"/"4")를 키로 { description, params }를 준다.
@@ -447,6 +469,8 @@ const clean = text => text.replaceAll("\u00a0", " ");
  * 실제로 어떤 스탯이 오르는지는 src/data/relicSetEffects.js가 정한다.
  */
 function transformRelicSet(kr, slug, now) {
+
+    const who = `${kr.name}(${kr.id})`;
 
     const effects = {};
 
@@ -459,12 +483,26 @@ function transformRelicSet(kr, slug, now) {
 
     }
 
+    // 부위마다 그림이 다르다. UI/relic/{icon}.png
+    const pieces = {};
+
+    for (const [suiteKey, piece] of Object.entries(kr.suite ?? {})) {
+
+        const slot = must(SUITE_SLOT_MAP, suiteKey, "유물 부위", who);
+
+        pieces[slot] = { name: piece.name ?? "", icon: piece.icon ?? null };
+
+    }
+
     return {
         id: String(kr.id),
         slug,
         name: kr.name ?? "",
         type: kr.isPlanarSuit ? "planar" : "relic",
-        effects
+        // 세트 대표 그림. 부위 아이콘과 달리 숫자다(예: "71000").
+        icon: kr.icon ? String(kr.icon) : null,
+        effects,
+        pieces
     };
 
 }
@@ -477,11 +515,11 @@ const json = value => quote(
 
 const COLUMNS = `id, slug, name, element, path, rarity, ` +
     `is_beta, released_at, ` +
-    `stats, actions, major_traces, minor_traces, eidolons, tags, synced_at`;
+    `stats, actions, major_traces, minor_traces, eidolons, tags`;
 
-const LC_COLUMNS = `id, slug, name, path, rarity, stats, passive, synced_at`;
+const LC_COLUMNS = `id, slug, name, path, rarity, stats, passive`;
 
-const RS_COLUMNS = `id, slug, name, type, effects, synced_at`;
+const RS_COLUMNS = `id, slug, name, type, icon, effects, pieces`;
 
 function toRelicSetSql(sets, now) {
 
@@ -491,8 +529,9 @@ function toRelicSetSql(sets, now) {
     ${quote(set.slug)},
     ${quote(set.name)},
     ${quote(set.type)},
+    ${quote(set.icon ?? "")},
     ${json(set.effects)},
-    ${now}
+    ${json(set.pieces)}
 );`
     );
 
@@ -520,8 +559,7 @@ function toLightConeSql(lightCones, now) {
     ${quote(lc.path)},
     ${lc.rarity},
     ${json(lc.stats)},
-    ${json(lc.passive)},
-    ${now}
+    ${json(lc.passive)}
 );`
     );
 
@@ -558,8 +596,7 @@ function toSql(characters, now) {
     ${json(character.majorTraces)},
     ${json(character.minorTraces)},
     ${json(character.eidolons)},
-    ${json(character.tags)},
-    ${now}
+    ${json(character.tags)}
 );`
     );
 

@@ -103,17 +103,4 @@ export class CharacterRepository {
 
     }
 
-    /**
-     * 시드가 언제 만들어졌는지. 데이터가 묵었는지 판단하는 용도다.
-     */
-    async syncedAt() {
-
-        const row = await this.db
-            .prepare(`SELECT MAX(synced_at) AS at FROM characters`)
-            .first();
-
-        return row?.at ?? 0;
-
-    }
-
 }
