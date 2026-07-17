@@ -4,8 +4,8 @@ import { Enemy } from "../models/Enemy.js";
 import { getBody } from "../util/http.js";
 import { error, success, methodNotAllowed } from "../util/response.js";
 
-// 캐릭터/공식 레지스트리를 채우기 위한 import.
-import "../data/index.js";
+// 공식 레지스트리를 채우기 위한 import.
+// 캐릭터 레지스트리는 D1에서 오므로 router가 ensureGameData()로 채운다.
 import "../formula/index.js";
 
 export async function handler(request, { repos }) {

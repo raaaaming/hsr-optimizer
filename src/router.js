@@ -6,6 +6,7 @@ import * as MetaAPI from "./api/meta.js";
 import * as StatsAPI from "./api/stats.js";
 
 import { createRepositories } from "./repositories/index.js";
+import { ensureGameData } from "./data/index.js";
 import { notFound, error, preflight } from "./util/response.js";
 import { getQuery } from "./util/http.js";
 
@@ -49,6 +50,10 @@ export async function router(request, env, ctx) {
             500
         );
     }
+
+    // 캐릭터 레지스트리는 D1에서 채워진다. 핸들러가 registry를 바로 읽을 수
+    // 있도록 여기서 한 번 보장한다. (isolate당 1회 조회, 이후는 캐시)
+    await ensureGameData(env);
 
     return handler(request, {
         env,

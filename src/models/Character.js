@@ -9,6 +9,18 @@ export class Character {
         this.rarity = 5;
 
         /**
+         * Yatta 내부 ID(예: "1310"). id는 slug라 재동기화 때 대조용으로 쓴다.
+         */
+        this.yattaId = null;
+
+        /**
+         * 미출시 캐릭터. 베타 수치는 출시 전에 바뀌므로 UI에서 구분해야 한다.
+         */
+        this.isBeta = false;
+
+        this.releasedAt = 0;
+
+        /**
          * 레벨/돌파에 따라 계산되는 기본 스탯 정의
          */
         this.stats = {

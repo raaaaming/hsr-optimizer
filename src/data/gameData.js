@@ -20,6 +20,9 @@ export const STATS = {
     effectRes:     { label: "효과 저항",        percent: true },
     energyRegen:   { label: "에너지 회복 효율",  percent: true },
     outgoingHealing:{ label: "치유량 보너스",   percent: true },
+    joy:           { label: "환락도",           percent: true },
+    dmgReduction:  { label: "받는 피해 감소",    percent: true },
+    shieldBoost:   { label: "실드량 보너스",     percent: true },
     physicalDmg:   { label: "물리 속성 피해 증가",   percent: true },
     fireDmg:       { label: "화염 속성 피해 증가",   percent: true },
     iceDmg:        { label: "얼음 속성 피해 증가",   percent: true },
@@ -44,9 +47,14 @@ export const ELEMENT_LABEL = {
     wind: "바람", quantum: "양자", imaginary: "허수"
 };
 
+/**
+ * 라벨은 Yatta의 types.pathType.name(공식 한국어 명칭)을 따른다.
+ * scripts/sync-gamedata.js의 PATH_MAP과 키가 일치해야 한다.
+ */
 export const PATH_LABEL = {
-    destruction: "파멸", hunt: "사냥", erudition: "지식", harmony: "화합",
-    nihility: "허무", preservation: "보존", abundance: "풍요", remembrance: "기억"
+    destruction: "파멸", hunt: "수렵", erudition: "지식", harmony: "화합",
+    nihility: "공허", preservation: "보존", abundance: "풍요", remembrance: "기억",
+    elation: "환락"
 };
 
 export const RELIC_SLOTS = [
@@ -92,38 +100,6 @@ export const RELIC_MAIN_STATS = {
 export function relicMainValue(max, level) {
     return max * (0.16 + 0.84 * (level / 15));
 }
-
-/**
- * 유물 세트.
- * two: 2세트 효과 중 무조건 적용되는 스탯.
- * four: 4세트 효과는 조건부가 많아 설명만 두고 계산에는 넣지 않는다.
- */
-export const RELIC_SETS = {
-    musketeer:      { label: "황야의 밀무리 무사", type: "relic", two: { atkPct: 0.12 }, four: "속도 +6%, 일반 공격 피해 +10%" },
-    ironCavalry:    { label: "천군만마의 강철 기병단", type: "relic", two: { breakEffect: 0.16 }, four: "격파 특수효과 150% 이상 시 격파 피해 증가" },
-    firesmith:      { label: "용암을 단조하는 대장장이", type: "relic", two: { fireDmg: 0.10 }, four: "전투 스킬 피해 +12%" },
-    glacialForest:  { label: "설원을 뒤덮는 사냥꾼", type: "relic", two: { iceDmg: 0.10 }, four: "필살기 사용 후 치명타 피해 +25%" },
-    brilliantStars: { label: "찬란한 별의 명인", type: "relic", two: { quantumDmg: 0.10 }, four: "적 방어력 무시 +10%" },
-    bandOfSizzling: { label: "우레를 쫓는 무리", type: "relic", two: { lightningDmg: 0.10 }, four: "전투 스킬 피해 +20%" },
-    eagle:          { label: "지는 해의 순간을 나는 매", type: "relic", two: { windDmg: 0.10 }, four: "필살기 사용 시 행동 앞당기기 25%" },
-    wastelander:    { label: "황무지의 무법자", type: "relic", two: { imaginaryDmg: 0.10 }, four: "적 감전/구속 시 치명타 확률·피해 증가" },
-    champion:       { label: "우승을 노리는 권투 챔피언", type: "relic", two: { physicalDmg: 0.10 }, four: "일반/전투 스킬 적중 시 공격력 증가" },
-    thief:          { label: "허공을 가르는 도적", type: "relic", two: { breakEffect: 0.16 }, four: "격파 특수효과 +20%, 적 약점 격파 시 에너지 회복" },
-    guard:          { label: "삶을 지키는 파수꾼", type: "relic", two: { hpPct: 0.12 }, four: "받는 피해 감소" },
-    messenger:      { label: "우주를 가로지르는 사자", type: "relic", two: { spdPct: 0.06 }, four: "필살기로 아군에게 속도 +12%" },
-
-    spaceSealing:   { label: "우주 밀봉 스테이션", type: "planar", two: { atkPct: 0.12 }, four: "" },
-    talia:          { label: "도적 공국 태연", type: "planar", two: { breakEffect: 0.16 }, four: "" },
-    glamoth:        { label: "창궁 전선 글라모스", type: "planar", two: { atkPct: 0.12 }, four: "" },
-    salsotto:       { label: "결투의 도시 살소토", type: "planar", two: { critRate: 0.08 }, four: "" },
-    izumo:          { label: "이즈모 고국과 타케히코", type: "planar", two: { atkPct: 0.12 }, four: "" },
-    sigonia:        { label: "피눈물의 시고니아", type: "planar", two: { critRate: 0.04 }, four: "" },
-    duran:          { label: "천마의 유목민 두란", type: "planar", two: {}, four: "" },
-    penacony:        { label: "꿈의 도시 페나코니", type: "planar", two: { energyRegen: 0.05 }, four: "" },
-    fleetOfAgeless: { label: "장생의 함대", type: "planar", two: { hpPct: 0.12 }, four: "" },
-    rutilantArena:  { label: "성휘 투기장", type: "planar", two: { critRate: 0.08 }, four: "" },
-    broken_keel:    { label: "부서진 용골", type: "planar", two: { effectRes: 0.10 }, four: "" }
-};
 
 /**
  * 부옵션으로 나올 수 있는 스탯.

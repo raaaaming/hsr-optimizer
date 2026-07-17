@@ -2,10 +2,10 @@ import { Build } from "../models/Build.js";
 import {
     RELIC_SLOTS,
     RELIC_MAIN_STATS,
-    RELIC_SETS,
     SUBSTAT_KEYS,
     MAX_LEVEL_BY_ASCENSION
 } from "../data/gameData.js";
+import { relicSetRegistry } from "../registry/index.js";
 import { getBody, getPagination } from "../util/http.js";
 import {
     success,
@@ -342,7 +342,7 @@ function pickRelics(source, errors) {
 
         seen.add(relic.slot);
 
-        if (relic.set && !Object.hasOwn(RELIC_SETS, relic.set)) {
+        if (relic.set && !relicSetRegistry.has(relic.set)) {
             errors.push(`relics[${index}].set '${relic.set}' is unknown.`);
             return;
         }

@@ -4,6 +4,9 @@ let META = null;
 let state = null;
 let currentId = null;
 
+/** 패시브가 모델링된 광추 slug. 나머지는 기본 스탯만 반영된다. */
+let PASSIVE_READY = new Set();
+
 // ===== 유틸 =====
 
 const api = async (path, options) => {
@@ -52,7 +55,25 @@ const character = () => META.characters.find(c => c.id === state.character);
 
 // ===== 상태 =====
 
-function newBuild(characterId = META.characters[0].id) {
+/**
+ * 캐릭터 목록은 출시 최신순이라 [0]이 미출시 베타일 수 있다.
+ * 베타는 수치가 출시 전에 바뀌므로 기본 선택으로 삼지 않는다.
+ */
+const defaultCharacter = () =>
+    META.characters.find(c => !c.isBeta) ?? META.characters[0];
+
+/**
+ * 레벨을 올릴 수 있는 액션만, 레벨 키당 하나씩.
+ *
+ * 강화 일반 공격은 일반 공격과 레벨을 공유하므로 입력이 하나여야 하고,
+ * 비술(maxLevel 1)은 레벨 자체가 없다.
+ */
+const levelledActions = char => char.actions.filter((action, i, all) =>
+    action.maxLevel > 1 &&
+    all.findIndex(a => a.levelKey === action.levelKey) === i
+);
+
+function newBuild(characterId = defaultCharacter().id) {
     const char = META.characters.find(c => c.id === characterId);
     return {
         name: `${char.name} 빌드`,
@@ -62,8 +83,14 @@ function newBuild(characterId = META.characters[0].id) {
         level: 80,
         ascension: 6,
         eidolon: 0,
-        skills: { basic: 6, skill: 10, ultimate: 10, talent: 10 },
-        traces: { major: { a2: true, a4: true, a6: true }, minor: [] },
+        skills: Object.fromEntries(
+            levelledActions(char).map(action => [action.levelKey, action.maxLevel])
+        ),
+        // 행적 ID는 캐릭터마다 다르므로(Yatta 노드 ID) 목록에서 만들어야 한다.
+        traces: {
+            major: Object.fromEntries(char.majorTraces.map(t => [t.id, true])),
+            minor: []
+        },
         lightCone: { id: null, level: 80, ascension: 6, superimposition: 1 },
         relics: [],
         stats: {},
@@ -98,13 +125,18 @@ function renderEditor() {
     $("levelCap").textContent = `(최대 ${META.maxLevelByAscension[state.ascension]})`;
 
     // 스킬
-    $("skills").replaceChildren(...char.actions.map(action => {
+    $("skills").replaceChildren(...levelledActions(char).map(action => {
         const wrap = el("div", "field");
         wrap.append(el("label", null, action.name));
         const input = el("input");
-        Object.assign(input, { type: "number", min: 1, max: 15, value: state.skills[action.id] ?? 1 });
+        Object.assign(input, {
+            type: "number",
+            min: 1,
+            max: action.maxLevel,
+            value: state.skills[action.levelKey] ?? action.maxLevel
+        });
         input.oninput = () => {
-            state.skills[action.id] = Number(input.value);
+            state.skills[action.levelKey] = Number(input.value);
             refresh();
         };
         wrap.append(input);
@@ -150,11 +182,13 @@ function renderEditor() {
     const lcSelect = $("lcSelect");
     const options = [el("option", null, "— 없음 —")];
     options[0].value = "";
-    for (const lc of META.lightCones) {
-        const option = el("option", null, `${lc.name} (${lc.rarity}★)`);
+    // 광추가 165개라 전부 넣고 비활성화하면 목록이 못 쓰게 된다.
+    // 어차피 운명이 다르면 착용할 수 없으니 아예 뺀다.
+    for (const lc of META.lightCones.filter(lc => lc.path === char.path)) {
+        const option = el("option", null,
+            `${lc.name} (${lc.rarity}★)` + (PASSIVE_READY.has(lc.slug) ? "" : " ·패시브 미반영")
+        );
         option.value = lc.id;
-        // 운명이 다른 광추는 착용할 수 없다.
-        option.disabled = lc.path !== char.path;
         options.push(option);
     }
     lcSelect.replaceChildren(...options);
@@ -185,7 +219,10 @@ function renderRelicEditor() {
         setSelect.append(none);
         for (const [id, set] of Object.entries(META.relicSets)) {
             if (set.type !== slot.type) continue;
-            const option = el("option", null, set.label);
+            // 조건부 효과뿐인 세트는 2세트 스탯이 없다. 빠진 게 아니라 원래 없는 것.
+            const option = el("option", null,
+                set.label + (set.modeled ? "" : " ·상시 스탯 없음")
+            );
             option.value = id;
             setSelect.append(option);
         }
@@ -459,6 +496,8 @@ async function init() {
     const meta = await api("/meta");
     META = meta.data;
 
+    PASSIVE_READY = new Set(META.lightConePassivesReady ?? []);
+
     // 명중 횟수 표시는 서버와 같은 기준을 쓴다.
     SUB_ROLL = {
         hp: 42.34, atk: 21.17, def: 21.17, spd: 2.6,
@@ -467,11 +506,32 @@ async function init() {
         breakEffect: 0.0648, effectHitRate: 0.0432, effectRes: 0.0432
     };
 
-    $("characterSelect").replaceChildren(...META.characters.map(char => {
-        const option = el("option", null, `${char.name} · ${META.elements[char.element]}`);
-        option.value = char.id;
-        return option;
-    }));
+    // 95명을 한 줄로 늘어놓으면 못 찾는다. 운명별로 묶고 이름순으로 정렬한다.
+    const byPath = new Map(Object.keys(META.paths).map(path => [path, []]));
+
+    for (const char of META.characters) {
+        byPath.get(char.path)?.push(char);
+    }
+
+    $("characterSelect").replaceChildren(
+        ...[...byPath]
+            .filter(([, list]) => list.length > 0)
+            .map(([path, list]) => {
+                const group = el("optgroup");
+                group.label = META.paths[path];
+                group.append(...list
+                    .sort((a, b) => a.name.localeCompare(b.name, "ko"))
+                    .map(char => {
+                        const option = el("option", null,
+                            `${char.name} · ${META.elements[char.element]}` +
+                            (char.isBeta ? " (베타)" : "")
+                        );
+                        option.value = char.id;
+                        return option;
+                    }));
+                return group;
+            })
+    );
 
     $("eidolon").replaceChildren(...[0, 1, 2, 3, 4, 5, 6].map(n => {
         const option = el("option", null, `${n}성혼`);

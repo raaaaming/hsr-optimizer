@@ -16,6 +16,10 @@ export class CharacterLoader {
         character.path = json.path;
         character.rarity = json.rarity;
 
+        character.yattaId = json.yattaId ?? null;
+        character.isBeta = json.isBeta ?? false;
+        character.releasedAt = json.releasedAt ?? 0;
+
         // 덮어쓰지 않고 병합한다. JSON에 taunt처럼 빠진 값이 있어도
         // Character의 기본값이 유지되어야 한다.
         Object.assign(character.stats, json.stats);
@@ -40,6 +44,12 @@ export class CharacterLoader {
             action.damage = actionJson.damage ?? true;
             action.effects = actionJson.effects ?? [];
             action.events = actionJson.events ?? [];
+
+            action.params = actionJson.params ?? null;
+            action.desc = actionJson.desc ?? "";
+            action.maxLevel = actionJson.maxLevel ?? 1;
+            action.skillId = actionJson.skillId ?? null;
+            action.levelKey = actionJson.levelKey ?? action.id;
 
             character.registerAction(action);
 

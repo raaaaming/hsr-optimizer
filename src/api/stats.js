@@ -4,8 +4,6 @@ import { statsCalculator } from "../services/StatsCalculator.js";
 import { getBody } from "../util/http.js";
 import { success, error, methodNotAllowed } from "../util/response.js";
 
-import "../data/index.js";
-
 /**
  * 저장하지 않고 최종 스펙만 계산한다.
  * 편집 중 실시간 미리보기에 쓴다.

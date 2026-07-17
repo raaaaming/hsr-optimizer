@@ -3,16 +3,15 @@ import { computeDamage, resolveEnemy } from "../../damage.js";
 import { param } from "../../params.js";
 
 /**
- * 지령-천공 포격 (전투 스킬)
+ * 반딧불이 Type-IV•뇌관 참격 (강화 일반 공격)
  *
- *   "자신의 HP 최대치의 #2%만큼 HP를 소모해 에너지를 #3%만큼 회복한다.
- *    지정된 단일 적에게 기갑 「샘」 공격력의 #1%만큼 화염 속성 피해를 가한다.
- *    자신의 다음번 행동 게이지를 #4% 증가시킨다"
+ *   "자신의 HP 최대치의 #2%만큼 HP를 회복한다.
+ *    지정된 단일 적에게 기갑 「샘」 공격력의 #1%만큼 화염 속성 피해를 가한다"
  *
- * HP 소모(#2) / 에너지(#3) / 행동 게이지(#4)는 전투 상태의 영역이라
- * 여기서는 피해(#1)만 계산한다.
+ * 「완전연소」 상태에서만 쓸 수 있고 레벨은 일반 공격과 공유한다(levelKey: basic).
+ * 회복(#2)은 전투 상태의 영역이라 여기서 다루지 않는다.
  */
-export default function fireflySkill({
+export default function fireflyBasicEnhanced({
     context, stats, character, build, definition, action
 }) {
 

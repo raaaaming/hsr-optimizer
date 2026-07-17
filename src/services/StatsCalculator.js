@@ -1,31 +1,34 @@
 import {
     STATS,
     RELIC_MAIN_STATS,
-    RELIC_SETS,
     SUBSTAT_ROLL,
     relicMainValue
 } from "../data/gameData.js";
 
-import { lightConeRegistry } from "../registry/index.js";
+import { lightConeRegistry, relicSetRegistry } from "../registry/index.js";
+import { LIGHT_CONE_PASSIVES } from "../data/lightConePassives.js";
+import { RELIC_SET_EFFECTS } from "../data/relicSetEffects.js";
 
 /**
- * 광추 레벨 스케일링.
+ * 광추 기본 스탯. Character.baseStatsAt과 같은 공식이다.
  *
- * NOTE: 실제 광추는 캐릭터처럼 base/growth/돌파 보정을 가진다.
- *       현재 데이터에는 만렙(80) 수치만 있어 선형 근사로 처리한다.
- *       광추 데이터가 확정되면 Character.baseStatsAt과 같은 형태로 교체할 것.
+ *   value = base + growth * (level - 1) + ascensionAdd[ascension]
  */
-const LC_LEVEL1_RATIO = 0.10;
+function lightConeStatsAt(lightCone, level, ascension) {
 
-function lightConeStatsAt(lightCone, level) {
+    const add = lightCone.stats.ascensionAdd?.[ascension]
+        ?? lightCone.stats.ascensionAdd?.at(-1)
+        ?? { hp: 0, atk: 0, def: 0 };
 
-    const ratio = LC_LEVEL1_RATIO
-        + (1 - LC_LEVEL1_RATIO) * ((level - 1) / 79);
+    const scale = key =>
+        (lightCone.stats.base?.[key] ?? 0)
+        + (lightCone.stats.growth?.[key] ?? 0) * (level - 1)
+        + (add[key] ?? 0);
 
     return {
-        hp: (lightCone.stats.hp ?? 0) * ratio,
-        atk: (lightCone.stats.atk ?? 0) * ratio,
-        def: (lightCone.stats.def ?? 0) * ratio
+        hp: scale("hp"),
+        atk: scale("atk"),
+        def: scale("def")
     };
 
 }
@@ -66,7 +69,11 @@ export class StatsCalculator {
         const lightCone = lightConeRegistry.get(build.lightCone?.id);
 
         const lcStats = lightCone
-            ? lightConeStatsAt(lightCone, build.lightCone.level ?? 80)
+            ? lightConeStatsAt(
+                lightCone,
+                build.lightCone.level ?? 80,
+                build.lightCone.ascension ?? 6
+            )
             : { hp: 0, atk: 0, def: 0 };
 
         return {
@@ -122,20 +129,30 @@ export class StatsCalculator {
 
     }
 
+    /**
+     * 광추 패시브의 상시 스탯 보너스.
+     *
+     * 어느 자리표시자가 어느 스탯인지는 lightConePassives.js에 적혀 있고,
+     * 값은 시드의 원본 params에서 읽는다. 해석이 없는 광추는 건너뛴다.
+     */
     applyLightCone(build, add) {
 
         const lightCone = lightConeRegistry.get(build.lightCone?.id);
 
-        if (!lightCone?.passive) return;
+        if (!lightCone) return;
+
+        const effects = LIGHT_CONE_PASSIVES[lightCone.slug];
+
+        if (!effects) return;
 
         const index = (build.lightCone.superimposition ?? 1) - 1;
 
-        const effect = lightCone.passive.superimposition?.[index];
+        for (const effect of effects) {
 
-        if (!effect) return;
+            const value = lightCone.passive?.params?.[effect.param]?.[index];
 
-        for (const [key, value] of Object.entries(effect)) {
-            add(key, value);
+            add(effect.stat, value);
+
         }
 
     }
@@ -162,21 +179,30 @@ export class StatsCalculator {
 
     }
 
+    /**
+     * 2세트 효과의 상시 스탯 보너스.
+     *
+     * 광추 패시브와 같은 구조다. 해석은 relicSetEffects.js에, 수치는 시드에.
+     * 4세트 효과는 조건부가 대부분이라 스탯 합산에 넣지 않는다(설명만 보여준다).
+     */
     applyRelicSets(build, add) {
 
         for (const { id, count } of this.resolveSets(build)) {
 
-            const set = RELIC_SETS[id];
+            if (count < 2) continue;
 
-            if (!set) continue;
+            const effects = RELIC_SET_EFFECTS[id];
 
-            if (count >= 2 && set.two) {
-                for (const [key, value] of Object.entries(set.two)) {
-                    add(key, value);
-                }
+            if (!effects) continue;
+
+            const params = relicSetRegistry.get(id)?.effects?.["2"]?.params;
+
+            for (const effect of effects) {
+
+                // 세트 효과는 중첩 단계가 없어 배열 길이가 항상 1이다.
+                add(effect.stat, params?.[effect.param]?.[0]);
+
             }
-
-            // 4세트 효과는 조건부가 대부분이라 스탯 합산에 넣지 않는다.
 
         }
 
@@ -206,7 +232,7 @@ export class StatsCalculator {
         return [...counts].map(([id, count]) => ({
             id,
             count,
-            label: RELIC_SETS[id]?.label ?? id,
+            label: relicSetRegistry.get(id)?.name ?? id,
             active2: count >= 2,
             active4: count >= 4
         }));

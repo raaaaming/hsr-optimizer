@@ -12,7 +12,11 @@
     "db:create": "wrangler d1 create hsr-optimizer",
     "db:migrate": "wrangler d1 migrations apply hsr-optimizer --local",
     "db:migrate:remote": "wrangler d1 migrations apply hsr-optimizer --remote",
-    "db:console": "wrangler d1 execute hsr-optimizer --local --command"
+    "db:console": "wrangler d1 execute hsr-optimizer --local --command",
+    "data:sync": "node scripts/sync-gamedata.js",
+    "data:check": "node scripts/check-interpretations.js",
+    "data:seed": "wrangler d1 execute hsr-optimizer --local --file=src/data/generated/characters.sql && wrangler d1 execute hsr-optimizer --local --file=src/data/generated/light_cones.sql && wrangler d1 execute hsr-optimizer --local --file=src/data/generated/relic_sets.sql",
+    "data:seed:remote": "wrangler d1 execute hsr-optimizer --remote --file=src/data/generated/characters.sql && wrangler d1 execute hsr-optimizer --remote --file=src/data/generated/light_cones.sql && wrangler d1 execute hsr-optimizer --remote --file=src/data/generated/relic_sets.sql"
   },
   "keywords": [
     "hsr",
