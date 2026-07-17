@@ -20,22 +20,26 @@ export class RelicSetRepository {
 
         if (!row) return null;
 
-        let effects;
+        const parse = (value, column) => {
 
-        try {
-            effects = JSON.parse(row.effects);
-        } catch {
-            throw new Error(
-                `Corrupted JSON in relic_sets.effects (id=${row.id})`
-            );
-        }
+            try {
+                return JSON.parse(value);
+            } catch {
+                throw new Error(
+                    `Corrupted JSON in relic_sets.${column} (id=${row.id})`
+                );
+            }
+
+        };
 
         return {
             id: row.id,
             slug: row.slug,
             name: row.name,
             type: row.type,
-            effects
+            icon: row.icon,
+            effects: parse(row.effects, "effects"),
+            pieces: parse(row.pieces, "pieces")
         };
 
     }

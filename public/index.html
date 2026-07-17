@@ -99,13 +99,20 @@
     <!-- ===== 결과 ===== -->
     <section class="panel sheet" aria-label="캐릭터 속성">
 
-        <header class="sheet-head">
-            <div>
-                <span id="sheetName" class="sheet-name">—</span>
-                <span id="sheetLevel" class="badge">Lv.80</span>
+        <div class="hero">
+            <img id="heroArt" class="hero-art" alt="" width="374" height="512">
+            <div class="hero-info">
+                <header class="sheet-head">
+                    <div>
+                        <span id="sheetName" class="sheet-name">—</span>
+                        <span id="sheetLevel" class="badge">Lv.80</span>
+                    </div>
+                    <div id="sheetTags" class="sheet-tags"></div>
+                </header>
+                <div id="heroSkills" class="hero-skills"></div>
+                <div id="heroLightCone" class="hero-lc"></div>
             </div>
-            <div id="sheetTags" class="sheet-tags"></div>
-        </header>
+        </div>
 
         <h2 class="panel-title">캐릭터 속성</h2>
         <div id="statGrid" class="stat-grid"></div>

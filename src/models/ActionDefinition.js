@@ -83,9 +83,15 @@ export class ActionDefinition {
         this.levelKey = "";
 
         /**
-         * Yatta 원본 스킬 ID. 재동기화 때 대조용이다.
+         * Yatta 원본 스킬 ID.
+         * 재동기화 때 대조용이자 성흔의 skillAddLevelList 키다.
          */
         this.skillId = null;
+
+        /**
+         * 스킬 그림 이름. public/img/skill/{icon}.png
+         */
+        this.icon = null;
 
     }
 

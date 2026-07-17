@@ -70,9 +70,14 @@ npm run deploy
 동기화는 빌드 타임에만 한다. Worker 런타임은 Yatta를 알지 못한다.
 
 ```bash
-npm run data:sync    # Yatta => src/data/generated/*.sql 생성 (캐릭터 95명 + 광추 165개)
+npm run data:sync    # Yatta => src/data/generated/*.sql 생성 (캐릭터 95명 + 광추 165개 + 유물 세트 60개)
 npm run data:seed    # 생성된 SQL을 D1에 적용
+npm run img:sync     # 시드가 가리키는 그림을 public/img로 (약 24MB)
 ```
+
+그림도 커밋한다. 브라우저는 우리 도메인에서만 이미지를 가져오고 Yatta를
+알지 못한다. 팬 사이트 CDN에 실사용 트래픽을 얹지 않으려는 것이기도 하다.
+`img:sync`는 이미 있는 파일을 건너뛰므로 패치 때 새 그림만 받는다.
 
 생성물은 git에 커밋한다. 패치 때 `data:sync`를 다시 돌리고 diff를 보면
 수치 변화가 그대로 드러난다. `scripts/sync-gamedata.js`의 매핑 테이블은

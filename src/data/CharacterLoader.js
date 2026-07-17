@@ -50,6 +50,7 @@ export class CharacterLoader {
             action.maxLevel = actionJson.maxLevel ?? 1;
             action.skillId = actionJson.skillId ?? null;
             action.levelKey = actionJson.levelKey ?? action.id;
+            action.icon = actionJson.icon ?? null;
 
             character.registerAction(action);
 

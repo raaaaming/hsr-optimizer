@@ -53,6 +53,9 @@ export async function handler(request) {
                 {
                     label: set.name,
                     type: set.type,
+                    icon: set.icon,
+                    // 부위마다 그림이 다르다. { head: { name, icon }, ... }
+                    pieces: set.pieces,
                     two: set.effects?.["2"]?.desc ?? "",
                     four: set.effects?.["4"]?.desc ?? "",
                     // 상시 스탯이 모델링된 세트인지. 아니면 조건부 효과뿐이다.
@@ -82,11 +85,16 @@ export async function handler(request) {
             path: character.path,
             rarity: character.rarity,
             isBeta: character.isBeta,
+            // 그림 파일 이름이 곧 Yatta의 숫자 ID다. /img/character|portrait/{icon}.png
+            icon: character.yattaId,
             actions: [...character.actions.values()].map(action => ({
                 id: action.id,
                 name: action.name,
                 levelKey: action.levelKey,
-                maxLevel: action.maxLevel
+                maxLevel: action.maxLevel,
+                icon: action.icon,
+                // 성흔 상한 계산에 필요하다(skillAddLevelList의 키).
+                skillId: action.skillId
             })),
             majorTraces: character.majorTraces,
             minorTraces: character.minorTraces,
