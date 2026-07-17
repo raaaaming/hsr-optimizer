@@ -3,13 +3,17 @@ import {
     RELIC_SLOTS,
     RELIC_MAIN_STATS,
     SUBSTAT_KEYS,
-    SUBSTAT_ROLL_TIERS,
+    SUBSTAT_ROLL_VALUES,
+    SUBSTAT_TIER_LABELS,
+    RELIC_LEVEL_STEP,
+    RELIC_MAX_LEVEL,
+    MAX_SUBSTATS,
     MAX_ROLLS_PER_SUBSTAT,
     MIN_EFFECTIVE_STATS,
     MAX_EFFECTIVE_STATS,
     MAX_LEVEL_BY_ASCENSION,
     MIN_LEVEL_BY_ASCENSION,
-    maxTotalRolls
+    rollBudget
 } from "../data/gameData.js";
 import { relicSetRegistry, characterRegistry } from "../registry/index.js";
 import { defaultEffectiveStats } from "../data/effectiveStats.js";
@@ -394,10 +398,19 @@ function pickRelics(source, errors) {
             return;
         }
 
-        const level = relic.level ?? 15;
+        const level = relic.level ?? RELIC_MAX_LEVEL;
 
-        if (!Number.isInteger(level) || level < 0 || level > 15) {
-            errors.push(`relics[${index}].level must be an integer between 0 and 15.`);
+        // 강화는 3레벨 단위로만 올라간다. 그때마다 부옵션 굴림이 1회 일어난다.
+        if (
+            !Number.isInteger(level) ||
+            level < 0 ||
+            level > RELIC_MAX_LEVEL ||
+            level % RELIC_LEVEL_STEP !== 0
+        ) {
+            errors.push(
+                `relics[${index}].level must be a multiple of ${RELIC_LEVEL_STEP} ` +
+                `between 0 and ${RELIC_MAX_LEVEL}.`
+            );
             return;
         }
 
@@ -429,8 +442,9 @@ function pickRelics(source, errors) {
 
             seenKeys.add(sub.key);
 
-            // 값이 아니라 굴림 목록을 받는다. 실제 게임의 부옵션은
-            // 최대치의 80/90/100% 굴림이 쌓여서 만들어진다.
+            // 값이 아니라 굴림 목록을 받는다. 부옵션은 붙거나 강화될 때마다
+            // 하/중/상 중 하나가 굴려져 쌓인다. 굴림마다 등급이 따로 정해지므로
+            // 같은 부옵션이라도 등급이 섞일 수 있다.
             if (
                 !Array.isArray(sub.rolls) ||
                 sub.rolls.length < 1 ||
@@ -443,14 +457,16 @@ function pickRelics(source, errors) {
                 continue;
             }
 
+            const tierCount = SUBSTAT_ROLL_VALUES[sub.key].length;
+
             const badTier = sub.rolls.some(
-                tier => !Number.isInteger(tier) || tier < 0 || tier >= SUBSTAT_ROLL_TIERS.length
+                tier => !Number.isInteger(tier) || tier < 0 || tier >= tierCount
             );
 
             if (badTier) {
                 errors.push(
                     `relics[${index}].substats[${i}].rolls must contain integers ` +
-                    `between 0 and ${SUBSTAT_ROLL_TIERS.length - 1}.`
+                    `between 0 and ${tierCount - 1} (${SUBSTAT_TIER_LABELS.join("/")}).`
                 );
                 continue;
             }
@@ -459,21 +475,24 @@ function pickRelics(source, errors) {
 
         }
 
-        if (substats.length > 4) {
-            errors.push(`relics[${index}] can have at most 4 substats.`);
+        if (substats.length > MAX_SUBSTATS) {
+            errors.push(`relics[${index}] can have at most ${MAX_SUBSTATS} substats.`);
             return;
         }
 
         // 굴림 총합은 강화 레벨이 허용하는 만큼만 나올 수 있다.
-        // 초기 부옵션 4개 + 3레벨마다 1회 => +15면 최대 9회다.
+        //
+        //   총 굴림 = 초기 부옵션 개수(3 또는 4) + 3레벨마다 1회
+        //
+        // 하한은 강제하지 않는다. 입력이 덜 끝난 유물도 저장할 수 있어야 한다.
         const totalRolls = substats.reduce((sum, sub) => sum + sub.rolls.length, 0);
 
-        const rollCap = maxTotalRolls(level);
+        const budget = rollBudget(level);
 
-        if (totalRolls > rollCap) {
+        if (totalRolls > budget.max) {
             errors.push(
                 `relics[${index}]: total substat rolls ${totalRolls} exceed ` +
-                `${rollCap} for level ${level}.`
+                `${budget.max} for level +${level}.`
             );
             return;
         }

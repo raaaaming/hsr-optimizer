@@ -5,8 +5,10 @@ import {
     RELIC_SLOTS,
     RELIC_MAIN_STATS,
     SUBSTAT_KEYS,
-    SUBSTAT_ROLL,
-    SUBSTAT_ROLL_TIERS,
+    SUBSTAT_ROLL_VALUES,
+    SUBSTAT_TIER_LABELS,
+    RELIC_LEVELS,
+    MAX_SUBSTATS,
     MAX_ROLLS_PER_SUBSTAT,
     MIN_EFFECTIVE_STATS,
     MAX_EFFECTIVE_STATS,
@@ -61,9 +63,11 @@ export async function handler(request) {
         substatKeys: SUBSTAT_KEYS,
 
         // 부옵션 굴림. UI가 서버와 같은 기준으로 값을 보여줘야 한다.
-        substatRoll: SUBSTAT_ROLL,
-        substatRollTiers: SUBSTAT_ROLL_TIERS,
+        substatRollValues: SUBSTAT_ROLL_VALUES,
+        substatTierLabels: SUBSTAT_TIER_LABELS,
         maxRollsPerSubstat: MAX_ROLLS_PER_SUBSTAT,
+        relicLevels: RELIC_LEVELS,
+        maxSubstats: MAX_SUBSTATS,
 
         minEffectiveStats: MIN_EFFECTIVE_STATS,
         maxEffectiveStats: MAX_EFFECTIVE_STATS,

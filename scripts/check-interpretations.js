@@ -1,14 +1,17 @@
 /**
- * 손으로 적은 해석(lightConePassives / relicSetEffects)이 시드와 맞는지 검사한다.
+ * 손으로 적은 게임 데이터가 실제 게임과 맞는지 검사한다.
  *
  *   node scripts/check-interpretations.js
  *
- * 이 둘은 사람이 적는 파일이라 오타가 나면 보너스가 조용히 0이 된다.
- * 다음을 잡는다.
+ * 1) 해석(lightConePassives / relicSetEffects)이 시드와 맞는지.
+ *    사람이 적는 파일이라 오타가 나면 보너스가 조용히 0이 된다.
  *
- *   - 시드에 없는 slug (오타 / 이름이 바뀐 세트)
- *   - 시드에 없는 자리표시자 (패치로 params 구조가 바뀐 경우)
- *   - STATS에 없는 스탯 키
+ *      - 시드에 없는 slug (오타 / 이름이 바뀐 세트)
+ *      - 시드에 없는 자리표시자 (패치로 params 구조가 바뀐 경우)
+ *      - STATS에 없는 스탯 키
+ *
+ * 2) 부옵션 굴림값(SUBSTAT_ROLL)이 게임의 표와 맞는지.
+ *    최대치 하나만 틀려도 모든 유물 계산이 조용히 어긋난다.
  *
  * 패치 후 data:sync를 돌렸으면 이것도 같이 돌려라.
  */
@@ -17,7 +20,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { STATS } from "../src/data/gameData.js";
+import { STATS, SUBSTAT_ROLL_VALUES } from "../src/data/gameData.js";
 import { LIGHT_CONE_PASSIVES } from "../src/data/lightConePassives.js";
 import { RELIC_SET_EFFECTS } from "../src/data/relicSetEffects.js";
 
@@ -100,6 +103,80 @@ function check(label, interpretations, seed) {
 
 }
 
+/**
+ * 위키의 "Subsidiary Stat Values (5-Star)" 표 [하, 중, 상].
+ * https://honkai-star-rail.fandom.com/wiki/Relic/Stats
+ *
+ * 대부분은 상한의 80/90/100%지만 속도(2 / 2.3 / 2.6)는 아니다.
+ * 그래서 비율로 유도하지 않고 값을 그대로 적는다. 비율로 유도하면 속도
+ * 최저 등급이 2가 아니라 2.08이 되는데, 1굴림에서는 표시가 같아서(2.0)
+ * 안 드러나고 굴림이 쌓여야 어긋난다.
+ *
+ * 퍼센트 스탯은 0~1 스케일로 저장하므로 100을 곱해 비교한다.
+ */
+const SUBSTAT_TABLE = {
+    hp:            [33.87004, 38.103795, 42.33751],
+    atk:           [16.935, 19.051877, 21.168754],
+    def:           [16.935, 19.051877, 21.168754],
+    spd:           [2, 2.3, 2.6],
+    hpPct:         [3.456, 3.888, 4.32],
+    atkPct:        [3.456, 3.888, 4.32],
+    defPct:        [4.32, 4.86, 5.4],
+    critRate:      [2.592, 2.916, 3.24],
+    critDamage:    [5.184, 5.832, 6.48],
+    breakEffect:   [5.184, 5.832, 6.48],
+    effectHitRate: [3.456, 3.888, 4.32],
+    effectRes:     [3.456, 3.888, 4.32]
+};
+
+function checkSubstats() {
+
+    const problems = [];
+
+    for (const [key, expected] of Object.entries(SUBSTAT_TABLE)) {
+
+        const tiers = SUBSTAT_ROLL_VALUES[key];
+
+        if (!tiers) {
+            problems.push(`부옵션: SUBSTAT_ROLL_VALUES에 '${key}'가 없다.`);
+            continue;
+        }
+
+        if (tiers.length !== expected.length) {
+            problems.push(
+                `부옵션: '${key}'의 등급이 ${tiers.length}개다. ` +
+                `${expected.length}개여야 한다.`
+            );
+            continue;
+        }
+
+        const percent = STATS[key]?.percent === true;
+
+        const actual = tiers.map(value => percent ? value * 100 : value);
+
+        // 위키 표기가 소수점에서 반올림돼 있어 아주 작은 차이는 허용한다.
+        const off = actual.findIndex((value, i) => Math.abs(value - expected[i]) > 0.001);
+
+        if (off !== -1) {
+            problems.push(
+                `부옵션: '${key}'가 게임 표와 다르다. ` +
+                `기대 ${expected.join("/")}, 실제 ${actual.map(v => +v.toFixed(6)).join("/")}`
+            );
+        }
+
+    }
+
+    const missing = Object.keys(SUBSTAT_ROLL_VALUES)
+        .filter(key => !Object.hasOwn(SUBSTAT_TABLE, key));
+
+    if (missing.length) {
+        problems.push(`부옵션: 표에 없는 항목이 있다: ${missing.join(", ")}`);
+    }
+
+    return problems;
+
+}
+
 async function main() {
 
     const lightCones = await readSeed(
@@ -114,11 +191,12 @@ async function main() {
 
     const problems = [
         ...check("광추", LIGHT_CONE_PASSIVES, lightCones),
-        ...check("유물 세트", RELIC_SET_EFFECTS, relicSets)
+        ...check("유물 세트", RELIC_SET_EFFECTS, relicSets),
+        ...checkSubstats()
     ];
 
     if (problems.length) {
-        console.error(`해석과 시드가 어긋난다 (${problems.length}건):\n`);
+        console.error(`게임 데이터가 어긋난다 (${problems.length}건):\n`);
         for (const problem of problems) console.error(`  - ${problem}`);
         process.exit(1);
     }
@@ -126,9 +204,10 @@ async function main() {
     const lcCount = Object.keys(LIGHT_CONE_PASSIVES).length;
     const rsCount = Object.keys(RELIC_SET_EFFECTS).length;
 
-    console.log("해석과 시드가 일치한다.");
+    console.log("게임 데이터가 일치한다.");
     console.log(`  광추      ${lcCount}/${lightCones.size} 해석됨`);
     console.log(`  유물 세트 ${rsCount}/${relicSets.size} 해석됨`);
+    console.log(`  부옵션    ${Object.keys(SUBSTAT_TABLE).length}/12 게임 표와 일치`);
 
 }
 

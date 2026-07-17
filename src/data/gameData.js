@@ -103,7 +103,7 @@ export function relicMainValue(max, level) {
 
 /**
  * 부옵션으로 나올 수 있는 스탯.
- * 실제 수치는 굴림값이라 사용자가 직접 입력한다.
+ * 값은 직접 적는 게 아니라 굴림(SUBSTAT_ROLL_VALUES)의 합으로 만들어진다.
  */
 export const SUBSTAT_KEYS = [
     "hp", "atk", "def", "hpPct", "atkPct", "defPct", "spd",
@@ -111,62 +111,103 @@ export const SUBSTAT_KEYS = [
 ];
 
 /**
- * 5성 부옵션 1회 굴림 최대치.
+ * 5성 부옵션 굴림 등급값. [하, 중, 상]
+ *
+ * 부옵션이 붙거나 강화될 때마다 이 셋 중 하나가 굴려져 더해진다.
+ * 그래서 부옵션 값은 임의의 수가 아니라 이 값들의 합으로만 나온다.
+ *
+ * 주의: 대부분은 상한의 80% / 90% / 100%지만 속도는 아니다.
+ * 속도는 2 / 2.3 / 2.6이라 2.6의 80%인 2.08이 아니다. 비율로 유도하면
+ * 1굴림은 표시가 같아서(2.0) 모르고 넘어가지만 굴림이 쌓이면 어긋난다.
+ * (최저 등급 5굴림이면 실제 10.0인데 비율 모델은 10.4가 된다)
+ * 그래서 비율이 아니라 값을 그대로 적는다.
+ *
+ * 게임 표와 맞는지 npm run data:check가 검사한다.
  */
-export const SUBSTAT_ROLL = {
-    hp: 42.34, atk: 21.17, def: 21.17, spd: 2.6,
-    hpPct: 0.0432, atkPct: 0.0432, defPct: 0.054,
-    critRate: 0.0324, critDamage: 0.0648,
-    breakEffect: 0.0648, effectHitRate: 0.0432, effectRes: 0.0432
+export const SUBSTAT_ROLL_VALUES = {
+    hp:            [33.87004, 38.103795, 42.33751],
+    atk:           [16.935, 19.051877, 21.168754],
+    def:           [16.935, 19.051877, 21.168754],
+    spd:           [2, 2.3, 2.6],
+    hpPct:         [0.03456, 0.03888, 0.0432],
+    atkPct:        [0.03456, 0.03888, 0.0432],
+    defPct:        [0.0432, 0.0486, 0.054],
+    critRate:      [0.02592, 0.02916, 0.0324],
+    critDamage:    [0.05184, 0.05832, 0.0648],
+    breakEffect:   [0.05184, 0.05832, 0.0648],
+    effectHitRate: [0.03456, 0.03888, 0.0432],
+    effectRes:     [0.03456, 0.03888, 0.0432]
 };
 
-/**
- * 부옵션 굴림 등급.
- *
- * 실제 게임은 부옵션이 붙거나 강화될 때마다 최대치의 80% / 90% / 100% 중
- * 하나가 굴려져 더해진다. 그래서 부옵션 값은 임의의 수가 아니라
- * 이 세 값의 합으로만 나올 수 있다.
- */
-export const SUBSTAT_ROLL_TIERS = [0.8, 0.9, 1.0];
+/** 굴림 등급 이름. 속도는 80/90/100%가 아니라 %로 부르면 틀린다. */
+export const SUBSTAT_TIER_LABELS = ["하", "중", "상"];
 
 /**
  * 굴림 목록 => 실제 부옵션 값.
- * rolls는 SUBSTAT_ROLL_TIERS의 인덱스 배열이다. 첫 굴림이 초기값이고
+ *
+ * rolls는 등급 인덱스(0=하 / 1=중 / 2=상) 배열이다. 첫 굴림이 초기값이고
  * 나머지는 강화하면서 그 부옵션이 선택될 때마다 붙은 것이다.
+ * 굴림마다 등급이 따로 정해지므로 "초기 등급 x n"이 아니다.
  */
 export function substatValue(key, rolls) {
 
-    const unit = SUBSTAT_ROLL[key];
+    const tiers = SUBSTAT_ROLL_VALUES[key];
 
-    if (!unit || !Array.isArray(rolls)) return 0;
+    if (!tiers || !Array.isArray(rolls)) return 0;
 
     return rolls.reduce(
-        (sum, tier) => sum + unit * (SUBSTAT_ROLL_TIERS[tier] ?? 1),
+        (sum, tier) => sum + (tiers[tier] ?? tiers.at(-1)),
         0
     );
 
 }
+
+/** 유물 강화 단계. 3레벨마다 부옵션 굴림이 1회 일어난다. */
+export const RELIC_LEVEL_STEP = 3;
+export const RELIC_MAX_LEVEL = 15;
+
+export const RELIC_LEVELS = [0, 3, 6, 9, 12, 15];
+
+/** 유물이 가질 수 있는 부옵션 개수. 5성은 3개 또는 4개로 나온다. */
+export const MIN_INITIAL_SUBSTATS = 3;
+export const MAX_SUBSTATS = 4;
 
 /**
  * 유물 강화로 부옵션이 굴려지는 횟수. 3레벨마다 1회다(+15면 5회).
  */
 export function upgradeRolls(level) {
 
-    return Math.floor((level ?? 0) / 3);
+    return Math.floor((level ?? 0) / RELIC_LEVEL_STEP);
 
 }
 
 /**
- * 부옵션 굴림 총합의 상한.
- * 초기 부옵션 4개 + 강화 굴림. 5성 +15면 4 + 5 = 9회다.
+ * 굴림 총합의 범위.
+ *
+ *   총 굴림 = 초기 부옵션 개수 + 강화 굴림 횟수
+ *
+ * 5성은 초기 부옵션이 3개 또는 4개다. 3개로 나온 유물은 첫 강화(+3)에서
+ * 4번째 부옵션이 붙고, 그 뒤로는 3강마다 기존 부옵션 하나가 1회씩 오른다.
+ * 그래서 +15에서는 8회(3개로 시작) 또는 9회(4개로 시작)다.
+ *
+ * 다 만들어진 유물만 보고는 3개로 시작했는지 4개로 시작했는지 알 수 없어서
+ * 범위로 둔다.
  */
-export function maxTotalRolls(level) {
+export function rollBudget(level) {
 
-    return 4 + upgradeRolls(level);
+    const upgrades = upgradeRolls(level);
+
+    return {
+        min: MIN_INITIAL_SUBSTATS + upgrades,
+        max: MAX_SUBSTATS + upgrades
+    };
 
 }
 
-/** 부옵션 하나에 몰아줄 수 있는 최대 굴림 수 (초기 1 + 강화 5) */
+/**
+ * 부옵션 하나에 몰아줄 수 있는 최대 굴림 수.
+ * 초기 1회 + 강화 5회.
+ */
 export const MAX_ROLLS_PER_SUBSTAT = 6;
 
 /** 유효 옵션 선택 개수 */
