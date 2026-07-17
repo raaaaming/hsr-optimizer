@@ -50,6 +50,79 @@ const fmt = (key, value) => {
 
 const label = key => META.stats[key]?.label ?? key;
 
+// ===== 게임 설명문 =====
+
+const escapeHtml = text => String(text ?? "").replace(
+    /[&<>"']/g,
+    ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch])
+);
+
+/**
+ * 게임 설명문을 실제 수치가 박힌 HTML로 바꾼다.
+ *
+ * 원본은 이렇게 생겼다.
+ *
+ *   "공격력이 <color=#f29e38ff><unbreak>#1[i]%</unbreak></color> 증가한다"
+ *   params = { "1": [0.24, 0.28, 0.32, 0.36, 0.4] }
+ *
+ * #n[형식] 은 params의 값으로 바뀐다. 뒤에 %가 붙어 있으면 비율이라
+ * 100을 곱한다(0.24 => 24%). 형식은 i=정수, f1=소수 1자리, f2=2자리다.
+ *
+ * params 형태가 두 가지다.
+ *   - 스킬/광추/유물: { "1": [레벨0, 레벨1, ...] } 처럼 자리표시자별 배열.
+ *     #n 은 params[n][index]. index는 스킬 레벨-1 / 광추 중첩-1이다.
+ *   - 돌파: [값1, 값2] 처럼 평평한 배열. 레벨이 없다.
+ *     #n 은 params[n-1] (자리표시자는 1부터, 배열은 0부터).
+ *
+ * 태그는 게임 고유 문법이라 HTML로 옮긴다. 데이터는 우리가 만든 시드지만
+ * 그래도 먼저 이스케이프하고 아는 태그만 되살린다. 남의 데이터를 그대로
+ * innerHTML에 넣는 습관은 언젠가 사고가 난다.
+ */
+function renderDesc(desc, params, index = 0) {
+
+    if (!desc) return "";
+
+    // 돌파처럼 평평한 배열이면 자리표시자 n을 params[n-1]로 읽는다.
+    const flat = Array.isArray(params);
+
+    let html = escapeHtml(desc);
+
+    // #1[i]% => 24%
+    html = html.replace(
+        /#(\d+)\[([if])(\d?)\](%?)/g,
+        (whole, n, kind, digits, percent) => {
+
+            const value = flat
+                ? params[Number(n) - 1]
+                : params?.[n]?.[Math.min(index, (params[n]?.length ?? 1) - 1)];
+
+            if (typeof value !== "number") return whole;
+
+            const scaled = percent ? value * 100 : value;
+
+            const text = kind === "i"
+                ? String(Math.round(scaled))
+                : scaled.toFixed(Number(digits) || 1);
+
+            return `<b>${text}${percent}</b>`;
+
+        }
+    );
+
+    return html
+        // 게임이 강조색으로 칠한 부분. 색은 금색 하나뿐이라 클래스로 넘긴다.
+        .replace(/&lt;color=#[0-9a-fA-F]{6,8}&gt;/g, '<span class="em">')
+        .replace(/&lt;\/color&gt;/g, "</span>")
+        .replace(/&lt;u&gt;/g, "<u>")
+        .replace(/&lt;\/u&gt;/g, "</u>")
+        // 줄바꿈 방지 태그. 의미가 없어 지운다.
+        .replace(/&lt;\/?unbreak&gt;/g, "")
+        // 인라인 스프라이트. 우리에겐 그림이 없어 지운다.
+        .replace(/&lt;icon[^&]*&gt;/g, "")
+        .replace(/\\n|\n/g, "<br>");
+
+}
+
 const el = (tag, cls, html) => {
     const node = document.createElement(tag);
     if (cls) node.className = cls;
@@ -107,8 +180,8 @@ const maxSkillLevel = (char, action, eidolon) => {
 };
 
 /**
- * 돌파가 허용하는 구간으로 레벨을 끌어당긴다.
- * 돌파는 상한만 여는 게 아니라 하한도 올린다(6돌파 => 70~80).
+ * 승급이 허용하는 구간으로 레벨을 끌어당긴다.
+ * 승급은 상한만 여는 게 아니라 하한도 올린다(6승급 => 70~80).
  */
 const clampLevel = (level, ascension) => Math.min(
     Math.max(level, META.minLevelByAscension[ascension]),
@@ -179,7 +252,7 @@ function renderEditor() {
     $("eidolon").value = state.eidolon;
     $("ascension").value = state.ascension;
 
-    // 돌파는 상한만 여는 게 아니라 하한도 같이 올린다(6돌파 => 70~80).
+    // 승급은 상한만 여는 게 아니라 하한도 같이 올린다(6승급 => 70~80).
     const floor = META.minLevelByAscension[state.ascension];
     const cap = META.maxLevelByAscension[state.ascension];
 
@@ -210,20 +283,37 @@ function renderEditor() {
         return wrap;
     }));
 
-    // 큰 행적
+    // 큰 행적. 스탯이 아니라 효과라 설명을 봐야 뭘 켜는지 알 수 있다.
     $("majorTraces").replaceChildren(...char.majorTraces.map(trace => {
         const locked = trace.unlockAscension > state.ascension;
         const on = !!state.traces.major[trace.id] && !locked;
-        const chip = el("label", `chip${on ? " on" : ""}`);
-        chip.innerHTML = `${trace.name} <span class="n">A${trace.unlockAscension}</span>`;
-        chip.style.opacity = locked ? .4 : 1;
-        chip.onclick = () => {
-            if (locked) return toast(`${trace.unlockAscension}돌파가 필요합니다.`, true);
+
+        const row = el("div", `trace-row${on ? " on" : ""}`);
+        row.style.opacity = locked ? .45 : 1;
+
+        if (trace.icon) {
+            const icon = el("img", "trace-icon");
+            Object.assign(icon, {
+                src: `/img/skill/${trace.icon}.png`, alt: "",
+                loading: "lazy", width: 30, height: 30
+            });
+            row.append(icon);
+        }
+
+        const body = el("div", "trace-body");
+        body.append(el("div", "trace-name",
+            `${escapeHtml(trace.name)} <span class="n">승급 ${trace.unlockAscension}</span>`));
+        body.append(el("div", "trace-desc", renderDesc(trace.desc, trace.params)));
+        row.append(body);
+
+        row.onclick = () => {
+            if (locked) return toast(`${trace.unlockAscension}승급이 필요합니다.`, true);
             state.traces.major[trace.id] = !state.traces.major[trace.id];
             renderEditor();
             refresh();
         };
-        return chip;
+
+        return row;
     }));
 
     // 작은 행적
@@ -235,7 +325,7 @@ function renderEditor() {
             `${label(trace.stat)} +${fmt(trace.stat, trace.value)} <span class="n">A${trace.unlockAscension}</span>`;
         chip.style.opacity = locked ? .4 : 1;
         chip.onclick = () => {
-            if (locked) return toast(`${trace.unlockAscension}돌파가 필요합니다.`, true);
+            if (locked) return toast(`${trace.unlockAscension}승급이 필요합니다.`, true);
             state.traces.minor = on
                 ? state.traces.minor.filter(id => id !== trace.id)
                 : [...state.traces.minor, trace.id];
@@ -251,9 +341,12 @@ function renderEditor() {
     options[0].value = "";
     // 광추가 165개라 전부 넣고 비활성화하면 목록이 못 쓰게 된다.
     // 어차피 운명이 다르면 착용할 수 없으니 아예 뺀다.
-    for (const lc of META.lightCones.filter(lc => lc.path === char.path)) {
+    // 전용 광추를 맨 위로, 그 아래는 5성 => 4성 => 3성 순이다.
+    for (const lc of lightConesFor(char)) {
         const option = el("option", null,
-            `${lc.name} (${lc.rarity}★)` + (PASSIVE_READY.has(lc.slug) ? "" : " ·패시브 미반영")
+            (lc.signature ? "★전용★ " : "") +
+            `${lc.name} (${lc.rarity}★)` +
+            (PASSIVE_READY.has(lc.slug) ? "" : " ·패시브 미반영")
         );
         option.value = lc.id;
         options.push(option);
@@ -263,8 +356,95 @@ function renderEditor() {
     $("lcLevel").value = state.lightCone.level;
     $("lcSuper").value = state.lightCone.superimposition;
 
+    renderLightConePassive();
+    renderEidolons(char);
     renderEffectiveStats();
     renderRelicEditor();
+}
+
+/**
+ * 광추 패시브 설명.
+ *
+ * 중첩 단계에 따라 수치가 바뀌므로 지금 고른 단계의 값을 박아서 보여준다.
+ * 상시 스탯만 최종 스펙에 들어가고 조건부 효과는 아직 안 들어간다는 것도
+ * 같이 알려준다. 숫자가 안 맞는다고 오해하지 않도록.
+ */
+function renderLightConePassive() {
+
+    const lightCone = META.lightCones.find(lc => lc.id === state.lightCone.id);
+
+    const box = $("lcPassive");
+
+    if (!lightCone?.passive?.desc) {
+        box.replaceChildren();
+        return;
+    }
+
+    const wrap = el("div", "passive");
+
+    wrap.append(el("div", "passive-name", escapeHtml(lightCone.passive.name)));
+
+    const desc = el("div", "passive-desc");
+    desc.innerHTML = renderDesc(
+        lightCone.passive.desc,
+        lightCone.passive.params,
+        state.lightCone.superimposition - 1
+    );
+    wrap.append(desc);
+
+    if (!PASSIVE_READY.has(lightCone.slug)) {
+        wrap.append(el("div", "passive-note",
+            "이 광추의 패시브는 아직 최종 스탯에 반영되지 않습니다 (기본 스탯만 적용)."));
+    }
+
+    box.replaceChildren(wrap);
+
+}
+
+/**
+ * 돌파(성흔) 목록.
+ *
+ * 1/2/4/6돌파는 스킬 레벨이 아니라 효과를 준다. 뭘 얻는지 보여야
+ * 몇 돌파를 맞출지 판단할 수 있다.
+ *
+ * 효과 자체는 아직 데미지 계산에 안 들어간다. 그건 전투 엔진의 몫이라
+ * 여기서는 보여주기만 한다.
+ */
+function renderEidolons(char) {
+
+    $("eidolonList").replaceChildren(...char.eidolons.map(eidolon => {
+
+        const rank = Number(String(eidolon.id).replace("e", ""));
+        const on = rank <= state.eidolon;
+
+        const row = el("div", `trace-row${on ? " on" : ""}`);
+        row.style.opacity = on ? 1 : .45;
+
+        if (eidolon.icon) {
+            const icon = el("img", "trace-icon");
+            Object.assign(icon, {
+                src: `/img/skill/${eidolon.icon}.png`, alt: "",
+                loading: "lazy", width: 30, height: 30
+            });
+            row.append(icon);
+        }
+
+        const body = el("div", "trace-body");
+        body.append(el("div", "trace-name",
+            `${escapeHtml(eidolon.name)} <span class="n">${rank}돌파</span>`));
+        body.append(el("div", "trace-desc", renderDesc(eidolon.desc, eidolon.params)));
+        row.append(body);
+
+        // 누르면 그 돌파까지 맞춘다. 위쪽 셀렉트와 같은 상태를 건드린다.
+        row.onclick = () => {
+            $("eidolon").value = rank === state.eidolon ? rank - 1 : rank;
+            $("eidolon").dispatchEvent(new Event("change"));
+        };
+
+        return row;
+
+    }));
+
 }
 
 /**
@@ -327,6 +507,21 @@ const rollBudget = level => {
     const upgrades = Math.floor((level ?? 0) / 3);
     return { min: 3 + upgrades, max: META.maxSubstats + upgrades };
 };
+
+/**
+ * 이 캐릭터가 낄 수 있는 광추. 전용 광추가 맨 위, 그 아래는 5성 => 4성 => 3성.
+ *
+ * 운명이 다른 광추는 애초에 못 낀다. 165개를 전부 넣고 비활성화하면
+ * 목록이 못 쓰게 되므로 아예 뺀다.
+ */
+const lightConesFor = char => META.lightCones
+    .filter(lc => lc.path === char.path)
+    .map(lc => ({ ...lc, signature: lc.slug === char.signatureLightCone }))
+    .sort((a, b) =>
+        (b.signature - a.signature) ||
+        (b.rarity - a.rarity) ||
+        a.name.localeCompare(b.name, "ko")
+    );
 
 /** 굴림 목록 => 실제 값. 서버의 substatValue()와 같은 계산이다. */
 const substatValue = (key, rolls) => {
@@ -575,19 +770,57 @@ const effectiveRows = () => new Set(
  * 그림은 전부 우리 도메인에서 나온다(public/img). scripts/sync-images.js가
  * 빌드 타임에 받아둔 것이라 런타임에 Yatta를 부르지 않는다.
  */
+/**
+ * 스킬 설명. 지금 스킬 레벨의 수치를 박아서 보여준다.
+ *
+ * 아이콘만 봐서는 뭘 하는 스킬인지 알 수 없고, 레벨을 올릴 때 수치가
+ * 어떻게 변하는지도 여기서만 확인할 수 있다.
+ */
+function showSkill(action, level) {
+
+    const box = $("skillDetail");
+
+    // 같은 걸 다시 누르면 닫는다.
+    if (box.dataset.action === action.id) {
+        box.replaceChildren();
+        box.dataset.action = "";
+        return;
+    }
+
+    box.dataset.action = action.id;
+
+    const wrap = el("div", "passive");
+
+    const head = el("div", "passive-name");
+    head.innerHTML =
+        escapeHtml(action.name) +
+        (action.maxLevel > 1 ? ` <span class="n">Lv.${level}</span>` : "");
+    wrap.append(head);
+
+    const desc = el("div", "passive-desc");
+    desc.innerHTML = renderDesc(action.desc, action.params, level - 1);
+    wrap.append(desc);
+
+    box.replaceChildren(wrap);
+
+}
+
 function renderHero(char, data) {
 
     const art = $("heroArt");
     art.src = `/img/portrait/${char.icon}.png`;
     art.alt = data.character.name;
 
-    // 레벨을 올릴 수 있는 스킬만. 강화판은 원본과 그림이 달라 따로 보여준다.
-    $("heroSkills").replaceChildren(...levelledActions(char).map(action => {
+    // 강화판(basic2 등)도 보여준다. 원본과 그림도 설명도 다르다.
+    $("heroSkills").replaceChildren(...char.actions.map(action => {
         const cap = maxSkillLevel(char, action, state.eidolon);
-        const level = Math.min(state.skills[action.levelKey] ?? cap, cap);
+        const level = action.maxLevel > 1
+            ? Math.min(state.skills[action.levelKey] ?? cap, cap)
+            : 1;
 
-        const item = el("div", "hero-skill");
-        item.title = `${action.name} Lv.${level}/${cap}`;
+        const item = el("button", "hero-skill");
+        item.type = "button";
+        item.title = `${action.name} — 눌러서 설명 보기`;
 
         const icon = el("img");
         Object.assign(icon, {
@@ -595,7 +828,12 @@ function renderHero(char, data) {
             alt: action.name, loading: "lazy", width: 34, height: 34
         });
 
-        item.append(icon, el("span", "lv", `${level}`));
+        item.append(icon);
+        // 비술은 레벨이 없다. 뱃지를 달면 1레벨이 의미 있는 것처럼 보인다.
+        if (action.maxLevel > 1) item.append(el("span", "lv", `${level}`));
+
+        item.onclick = () => showSkill(action, level);
+
         return item;
     }));
 
@@ -629,8 +867,8 @@ function renderSheet(data) {
     $("sheetTags").replaceChildren(
         el("span", "tag el", META.elements[data.character.element]),
         el("span", "tag", META.paths[data.character.path]),
-        el("span", "tag", `${data.ascension}돌파`),
-        el("span", "tag", `${data.eidolon}성혼`)
+        el("span", "tag", `${data.ascension}승급`),
+        el("span", "tag", `${data.eidolon}돌파`)
     );
 
     renderHero(char, data);
@@ -680,13 +918,34 @@ function renderSheet(data) {
     const sets = data.sets.filter(s => s.count >= 2);
     $("setList").replaceChildren(...(sets.length
         ? sets.map(set => {
-            const row = el("div", "set-row");
             const meta = META.relicSets[set.id];
-            const left = el("div");
-            left.append(el("div", null, set.label));
-            if (set.active4 && meta?.four) left.append(el("div", "desc", meta.four));
-            row.append(left);
-            row.append(el("span", "pc", set.active4 ? "4세트" : "2세트"));
+            const row = el("div", "set-row");
+
+            const head = el("div", "set-head");
+            if (meta?.icon) {
+                const icon = el("img", "set-icon");
+                Object.assign(icon, {
+                    src: `/img/relic/${meta.icon}.png`, alt: "",
+                    loading: "lazy", width: 24, height: 24
+                });
+                head.append(icon);
+            }
+            head.append(el("span", null, set.label));
+            head.append(el("span", "pc", set.active4 ? "4세트" : "2세트"));
+            row.append(head);
+
+            // 2세트 효과도 보여준다. 행성구는 2세트 효과뿐이라 이걸 빼면
+            // 이름만 덩그러니 남는다.
+            for (const pieces of ["2", "4"]) {
+                const effect = meta?.effects?.[pieces];
+                if (!effect?.desc || set.count < Number(pieces)) continue;
+                const line = el("div", "set-effect");
+                line.innerHTML =
+                    `<span class="pcs">${pieces}세트</span> ` +
+                    renderDesc(effect.desc, effect.params, 0);
+                row.append(line);
+            }
+
             return row;
         })
         : [el("p", "empty", "2세트 이상 착용한 세트가 없습니다.")]
@@ -848,14 +1107,14 @@ async function init() {
     );
 
     $("eidolon").replaceChildren(...[0, 1, 2, 3, 4, 5, 6].map(n => {
-        const option = el("option", null, `${n}성혼`);
+        const option = el("option", null, `${n}돌파`);
         option.value = n;
         return option;
     }));
 
     $("ascension").replaceChildren(...[0, 1, 2, 3, 4, 5, 6].map(n => {
         const option = el("option", null,
-            `${n}돌파 (Lv.${META.minLevelByAscension[n]}~${META.maxLevelByAscension[n]})`
+            `${n}승급 (Lv.${META.minLevelByAscension[n]}~${META.maxLevelByAscension[n]})`
         );
         option.value = n;
         return option;
@@ -941,10 +1200,16 @@ async function init() {
 
     $("lcSelect").onchange = e => {
         state.lightCone.id = e.target.value || null;
+        renderLightConePassive();
         refresh();
     };
     $("lcLevel").oninput = e => { state.lightCone.level = Number(e.target.value); refresh(); };
-    $("lcSuper").onchange = e => { state.lightCone.superimposition = Number(e.target.value); refresh(); };
+    $("lcSuper").onchange = e => {
+        state.lightCone.superimposition = Number(e.target.value);
+        // 중첩 단계가 바뀌면 패시브 설명의 수치도 바뀐다.
+        renderLightConePassive();
+        refresh();
+    };
 
     $("saveBtn").onclick = save;
 

@@ -19,6 +19,7 @@ import {
 import { LIGHT_CONE_PASSIVES } from "../data/lightConePassives.js";
 import { RELIC_SET_EFFECTS } from "../data/relicSetEffects.js";
 import { defaultEffectiveStats } from "../data/effectiveStats.js";
+import { SIGNATURE_LIGHT_CONES } from "../data/signatureLightCones.js";
 
 import {
     characterRegistry,
@@ -56,8 +57,8 @@ export async function handler(request) {
                     icon: set.icon,
                     // 부위마다 그림이 다르다. { head: { name, icon }, ... }
                     pieces: set.pieces,
-                    two: set.effects?.["2"]?.desc ?? "",
-                    four: set.effects?.["4"]?.desc ?? "",
+                    // 세트 개수별 { desc, params }. 행성구는 "2"만 있다.
+                    effects: set.effects,
                     // 상시 스탯이 모델링된 세트인지. 아니면 조건부 효과뿐이다.
                     modeled: Object.hasOwn(RELIC_SET_EFFECTS, set.slug)
                 }
@@ -93,7 +94,11 @@ export async function handler(request) {
                 levelKey: action.levelKey,
                 maxLevel: action.maxLevel,
                 icon: action.icon,
-                // 성흔 상한 계산에 필요하다(skillAddLevelList의 키).
+                tag: action.tags?.[0] ?? null,
+                // 설명문에 실제 수치를 박으려면 원본과 params가 같이 필요하다.
+                desc: action.desc,
+                params: action.params,
+                // 돌파 상한 계산에 필요하다(skillAddLevelList의 키).
                 skillId: action.skillId
             })),
             majorTraces: character.majorTraces,
@@ -101,7 +106,9 @@ export async function handler(request) {
             eidolons: character.eidolons,
             // 새 빌드의 유효 옵션 초기값. 서버가 생성 시 쓰는 것과 같은 값이라
             // 화면에 보이던 게 저장하는 순간 바뀌지 않는다.
-            defaultEffectiveStats: defaultEffectiveStats(character)
+            defaultEffectiveStats: defaultEffectiveStats(character),
+            // 전용 광추 slug. 데이터에 없어 손으로 적으므로 대부분 null이다.
+            signatureLightCone: SIGNATURE_LIGHT_CONES[character.id] ?? null
         })),
 
         lightCones: lightConeRegistry.getAll().map(lightCone => ({
@@ -112,7 +119,9 @@ export async function handler(request) {
             rarity: lightCone.rarity,
             passive: {
                 name: lightCone.passive?.name ?? "",
-                desc: lightCone.passive?.desc ?? ""
+                desc: lightCone.passive?.desc ?? "",
+                // 중첩 단계별 배열. UI가 설명문에 실제 수치를 박는 데 쓴다.
+                params: lightCone.passive?.params ?? null
             }
         })),
 

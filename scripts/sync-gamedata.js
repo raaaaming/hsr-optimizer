@@ -321,6 +321,8 @@ function toTraces(subSkills, who) {
                 name: node.name ?? "",
                 desc: node.description ?? "",
                 icon: node.icon ?? null,
+                // 설명문에 #1[i] 같은 자리표시자가 있다. params 없이는 못 보여준다.
+                params: node.params ?? null,
                 unlockAscension
             });
 

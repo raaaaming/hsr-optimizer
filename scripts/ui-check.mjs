@@ -165,6 +165,44 @@ check(
     !(await page.locator("#statGrid .stat-row.hi .k").allTextContents()).includes("속도")
 );
 
+// 설명문 자리표시자가 실제 수치로 렌더된다 (#1[i] 같은 게 남으면 안 된다)
+const rawPlaceholders = await page.evaluate(() =>
+    (document.body.innerText.match(/#\d+\[[a-z]\d?\]/g) || []).slice(0, 5));
+
+check("설명문에 raw 자리표시자가 없다", rawPlaceholders.length === 0, rawPlaceholders.join(", "));
+
+// 돌파 효과 패널이 채워진다
+check("돌파 효과가 표시된다",
+    await page.locator("#eidolonList .trace-row").count() === 6);
+
+check("돌파 효과 설명에 수치가 박힌다",
+    (await page.locator("#eidolonList .trace-desc b").count()) > 0);
+
+// 큰 행적도 설명이 나온다
+check("큰 행적 설명이 표시된다",
+    (await page.locator("#majorTraces .trace-desc").first().innerText()).length > 5);
+
+// 스킬 아이콘을 누르면 설명이 열리고 다시 누르면 닫힌다
+const firstSkill = page.locator("#heroSkills .hero-skill").first();
+await firstSkill.click();
+await page.waitForTimeout(300);
+check("스킬 아이콘을 누르면 설명이 열린다",
+    (await page.locator("#skillDetail .passive-desc").count()) === 1);
+await firstSkill.click();
+await page.waitForTimeout(300);
+check("같은 스킬을 다시 누르면 닫힌다",
+    (await page.locator("#skillDetail .passive-desc").count()) === 0);
+
+// 광추 패시브 설명이 나온다
+await page.selectOption("#lcSelect", { index: 1 });
+await page.waitForTimeout(400);
+check("광추 패시브 설명이 표시된다",
+    (await page.locator("#lcPassive .passive-desc").count()) === 1);
+
+// 전용 광추가 목록 맨 위에 온다
+check("전용 광추가 맨 위에 온다",
+    (await page.locator("#lcSelect option").nth(1).innerText()).includes("전용"));
+
 // 9) 그림이 다 뜬다
 const broken = await page.evaluate(() =>
     [...document.images]

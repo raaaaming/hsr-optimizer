@@ -41,14 +41,14 @@
                 <select id="characterSelect"></select>
             </div>
             <div class="field">
-                <label for="eidolon">성혼</label>
+                <label for="eidolon">돌파</label>
                 <select id="eidolon"></select>
             </div>
         </div>
 
         <div class="grid-2">
             <div class="field">
-                <label for="ascension">돌파</label>
+                <label for="ascension">승급</label>
                 <select id="ascension"></select>
             </div>
             <div class="field">
@@ -59,9 +59,6 @@
 
         <h3 class="section-title">스킬</h3>
         <div id="skills" class="grid-2"></div>
-
-        <h3 class="section-title">큰 행적</h3>
-        <div id="majorTraces" class="chips"></div>
 
         <h3 class="section-title">
             작은 행적
@@ -84,6 +81,7 @@
                 <select id="lcSuper"></select>
             </div>
         </div>
+        <div id="lcPassive"></div>
 
         <h3 class="section-title">
             유효 옵션
@@ -110,6 +108,7 @@
                     <div id="sheetTags" class="sheet-tags"></div>
                 </header>
                 <div id="heroSkills" class="hero-skills"></div>
+                <div id="skillDetail" class="skill-detail"></div>
                 <div id="heroLightCone" class="hero-lc"></div>
             </div>
         </div>
@@ -128,6 +127,17 @@
 
         <h2 class="panel-title">유물 속성</h2>
         <div id="relicCards" class="relic-cards"></div>
+
+    </section>
+
+    <!-- ===== 효과 ===== -->
+    <section class="panel effects" aria-label="돌파 효과와 큰 행적">
+
+        <h2 class="panel-title">돌파 효과</h2>
+        <div id="eidolonList" class="trace-list"></div>
+
+        <h2 class="panel-title">큰 행적</h2>
+        <div id="majorTraces" class="trace-list"></div>
 
     </section>
 
