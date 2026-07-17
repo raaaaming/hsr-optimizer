@@ -129,7 +129,43 @@ check(
     await page.locator("#effectiveStats .chip.on").count() === 1
 );
 
-// 8) 6돌파에서 레벨 하한
+// 8) 스탯 시트 강조가 유효 옵션을 따라간다
+await page.selectOption("#characterSelect", "firefly");
+await page.waitForTimeout(800);
+
+const onChips = await page.locator("#effectiveStats .chip.on").allTextContents();
+const hiRows = await page.locator("#statGrid .stat-row.hi .k").allTextContents();
+
+check(
+    "시트 강조가 유효 옵션과 일치한다",
+    onChips.length > 0 && [...onChips].sort().join() === [...hiRows].sort().join(),
+    `옵션 [${onChips}] vs 강조 [${hiRows}]`
+);
+
+check(
+    "치확/치피로 고정돼 있지 않다",
+    !hiRows.includes("치명타 확률") || onChips.includes("치명타 확률"),
+    `강조 [${hiRows}]`
+);
+
+// 유효 옵션을 바꾸면 강조도 바뀐다
+await page.locator("#effectiveStats .chip", { hasText: "치명타 피해" }).first().click();
+await page.waitForTimeout(600);
+
+check(
+    "유효 옵션을 켜면 그 행이 강조된다",
+    (await page.locator("#statGrid .stat-row.hi .k").allTextContents()).includes("치명타 피해")
+);
+
+await page.locator("#effectiveStats .chip.on", { hasText: "속도" }).first().click();
+await page.waitForTimeout(600);
+
+check(
+    "유효 옵션을 끄면 강조가 사라진다",
+    !(await page.locator("#statGrid .stat-row.hi .k").allTextContents()).includes("속도")
+);
+
+// 9) 6돌파에서 레벨 하한
 await page.selectOption("#ascension", "6");
 await page.waitForTimeout(200);
 check(

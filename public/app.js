@@ -19,17 +19,33 @@ const api = async (path, options) => {
 
 const isPercent = key => META.stats[key]?.percent === true;
 
+/**
+ * 게임은 스탯을 반올림하지 않고 버린다.
+ *
+ * 부옵션 굴림으로 확인할 수 있다. 효과 저항 1굴림은 내부적으로 3.888%인데
+ * 게임은 3.8%로 보여준다(반올림이면 3.9%). 방어력 16.936은 16이다(반올림 17).
+ * 속도 2.08 => 2.0, 치명타 확률 2.592 => 2.5, 치명타 피해 5.184 => 5.1 도
+ * 전부 같은 규칙이다.
+ *
+ * 부동소수점 때문에 4.32가 4.3199999로 계산돼 4.3이 4.2로 밀리는 걸 막으려고
+ * 아주 작은 값을 더한 뒤 버린다.
+ */
+const truncate = (value, decimals) => {
+    const factor = 10 ** decimals;
+    return Math.trunc(value * factor + 1e-9) / factor;
+};
+
 const fmt = (key, value) => {
     if (value === undefined || value === null) return "—";
 
-    if (isPercent(key)) return `${(value * 100).toFixed(1)}%`;
+    if (isPercent(key)) return `${truncate(value * 100, 1).toFixed(1)}%`;
 
-    // 속도는 반올림하면 안 된다. 행동 순서가 갈리는 구간(134.4 등)이
-    // 소수점에서 정해지는데, 부옵션 1굴림이 2.6이라 3으로 보여주면
-    // 실제로는 못 넘는 구간을 넘은 것처럼 보인다.
-    if (key === "spd") return value.toFixed(1);
+    // 속도는 소수점을 버리면 안 된다. 행동 순서가 갈리는 구간이
+    // 소수점에서 정해지는데 2.6을 3으로 보여주면 실제로는 못 넘는
+    // 구간을 넘은 것처럼 보인다.
+    if (key === "spd") return truncate(value, 1).toFixed(1);
 
-    return Math.round(value).toLocaleString("ko-KR");
+    return truncate(value, 0).toLocaleString("ko-KR");
 };
 
 const label = key => META.stats[key]?.label ?? key;
@@ -276,24 +292,35 @@ function renderEffectiveStats() {
 const rollsUsed = relic =>
     (relic?.substats ?? []).reduce((sum, sub) => sum + (sub.rolls?.length ?? 0), 0);
 
-/** 강화 레벨이 허용하는 굴림 총합 (초기 4개 + 3레벨마다 1회) */
-const maxTotalRolls = level => 4 + Math.floor((level ?? 0) / 3);
+/**
+ * 강화 레벨이 허용하는 굴림 총합.
+ *
+ *   총 굴림 = 초기 부옵션 개수 + 3레벨마다 1회
+ *
+ * 5성은 초기 부옵션이 3개 또는 4개라 +15면 8~9회다. 다 만들어진 유물만
+ * 보고는 어느 쪽으로 시작했는지 알 수 없어서 범위로 둔다.
+ */
+const rollBudget = level => {
+    const upgrades = Math.floor((level ?? 0) / 3);
+    return { min: 3 + upgrades, max: META.maxSubstats + upgrades };
+};
 
 /** 굴림 목록 => 실제 값. 서버의 substatValue()와 같은 계산이다. */
 const substatValue = (key, rolls) => {
-    const unit = META.substatRoll[key];
-    if (!unit || !rolls) return 0;
-    return rolls.reduce(
-        (sum, tier) => sum + unit * (META.substatRollTiers[tier] ?? 1), 0
-    );
+    const tiers = META.substatRollValues[key];
+    if (!tiers || !rolls) return 0;
+    return rolls.reduce((sum, tier) => sum + (tiers[tier] ?? tiers.at(-1)), 0);
 };
 
 /**
  * 굴림 편집기.
  *
  * 실제 게임의 부옵션은 아무 수나 나오는 게 아니라, 붙거나 강화될 때마다
- * 최대치의 80/90/100% 중 하나가 굴려져 쌓인다. 그래서 값을 직접 적는 대신
- * 굴림을 하나씩 넣고 등급을 고른다. 값은 거기서 유도된다.
+ * 하/중/상 중 하나가 굴려져 쌓인다. 그래서 값을 직접 적는 대신 굴림을
+ * 하나씩 넣고 등급을 고른다. 값은 거기서 유도된다.
+ *
+ * 굴림마다 등급이 따로 정해지므로 같은 부옵션이라도 등급이 섞일 수 있다.
+ * (치명타 피해가 상+하로 붙으면 11.6%가 되는데, 등급이 고정이면 나올 수 없는 값이다)
  */
 function renderRolls(slotId, index, sub, used, cap) {
 
@@ -311,12 +338,15 @@ function renderRolls(slotId, index, sub, used, cap) {
     sub.rolls.forEach((tier, r) => {
         const chip = el("button", "roll");
         chip.type = "button";
-        chip.textContent = `${Math.round(META.substatRollTiers[tier] * 100)}%`;
-        chip.title = r === 0 ? "초기값" : `강화 ${r}회차`;
+        // 등급을 %로 부르지 않는다. 속도는 2/2.3/2.6이라 80/90/100%가 아니다.
+        chip.textContent = META.substatTierLabels[tier];
+        chip.title =
+            `${r === 0 ? "초기값" : `강화 ${r}회차`} — ` +
+            fmt(sub.key, META.substatRollValues[sub.key][tier]);
         if (r === 0) chip.classList.add("initial");
-        // 클릭할 때마다 80 → 90 → 100 → 80 으로 돈다.
+        // 클릭할 때마다 하 → 중 → 상 → 하 로 돈다.
         chip.onclick = () => commit(rolls => {
-            rolls[r] = (rolls[r] + 1) % META.substatRollTiers.length;
+            rolls[r] = (rolls[r] + 1) % META.substatTierLabels.length;
             return rolls;
         });
         wrap.append(chip);
@@ -416,31 +446,34 @@ function renderRelicEditor() {
 
         const lvField = el("div", "field");
         lvField.append(el("label", null, "강화"));
-        const lvInput = el("input");
-        Object.assign(lvInput, { type: "number", min: 0, max: 15, value: relic?.level ?? 15 });
-        lvInput.oninput = () => {
-            setRelic(slot.id, {
-                level: Math.min(Math.max(Number(lvInput.value) || 0, 0), 15)
-            });
+        // 강화는 3레벨 단위로만 올라간다. 그때마다 부옵션 굴림이 1회 일어난다.
+        const lvSelect = el("select");
+        for (const n of META.relicLevels) {
+            const option = el("option", null, `+${n}`);
+            option.value = n;
+            lvSelect.append(option);
+        }
+        lvSelect.value = relic?.level ?? 15;
+        lvSelect.onchange = () => {
+            setRelic(slot.id, { level: Number(lvSelect.value) });
+            renderRelicEditor();
             refresh();
         };
-        // 강화 레벨이 굴림 상한을 정하므로 입력이 끝나면 다시 그린다.
-        // (입력 중에 그리면 포커스가 날아간다)
-        lvInput.onchange = () => renderRelicEditor();
-        lvField.append(lvInput);
+        lvField.append(lvSelect);
         row.append(lvField);
         box.append(row);
 
         // 부옵션 4개
         const used = rollsUsed(relic);
-        const cap = maxTotalRolls(relic?.level ?? 15);
+        const budget = rollBudget(relic?.level ?? 15);
+        const cap = budget.max;
 
         box.append(el("label", "hint",
-            `부 옵션 — 굴림 ${used}/${cap}회 ` +
-            `(초기값 1회 + 강화 시 선택될 때마다 1회)`
+            `부 옵션 — 굴림 ${used}/${budget.min}~${budget.max}회 ` +
+            `(3강마다 1회씩 붙거나 오른다)`
         ));
 
-        for (let i = 0; i < 4; i++) {
+        for (let i = 0; i < META.maxSubstats; i++) {
             const sub = relic?.substats?.[i];
             const subRow = el("div", "sub-row");
 
@@ -501,6 +534,18 @@ function renderRelicEditor() {
 
 const SHEET_LEFT = ["hp", "atk", "def", "spd", "critRate", "critDamage"];
 
+/**
+ * 유효 옵션이 가리키는 스탯 시트의 행.
+ *
+ * 유효 옵션은 부옵션 키라서 비율 옵션(atkPct)은 시트에 그 이름의 행이 없다.
+ * STATS의 appliesTo가 "공격력 비율은 공격력에 붙는다"는 관계를 갖고 있으니
+ * 그걸로 실제 행(atk)으로 접는다. 공격력과 공격력 비율 중 뭘 골랐든
+ * 강조되는 건 공격력 행이다.
+ */
+const effectiveRows = () => new Set(
+    state.effectiveStats.map(key => META.stats[key]?.appliesTo ?? key)
+);
+
 function renderSheet(data) {
     $("sheetName").textContent = data.character.name;
     $("sheetLevel").textContent = `Lv.${data.level}`;
@@ -518,10 +563,14 @@ function renderSheet(data) {
 
     const rows = [];
 
+    // 강조는 고른 유효 옵션을 따라간다. 치확/치피로 고정하면
+    // 반디처럼 격파 특수효과가 핵심인 캐릭터에서 엉뚱한 걸 강조하게 된다.
+    const highlight = effectiveRows();
+
     for (const key of SHEET_LEFT) {
         const value = data.final[key];
         const base = data.base[key];
-        const row = el("div", `stat-row${["critRate", "critDamage"].includes(key) ? " hi" : ""}`);
+        const row = el("div", `stat-row${highlight.has(key) ? " hi" : ""}`);
         row.append(el("span", "k", label(key)));
 
         const split = el("span", "split");
@@ -541,7 +590,7 @@ function renderSheet(data) {
     }
 
     for (const key of right) {
-        const row = el("div", "stat-row");
+        const row = el("div", `stat-row${highlight.has(key) ? " hi" : ""}`);
         row.append(el("span", "k", label(key)));
         row.append(el("span", "v", fmt(key, data.final[key] ?? 0)));
         rows.push(row);
