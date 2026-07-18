@@ -1,19 +1,20 @@
 import { ELEMENT_DMG_KEY } from "../data/gameData.js";
+import { breakLevelMultiplier, BREAK_ELEMENT_RATIO } from "./breakData.js";
 
 /**
  * 최종 피해 계산.
  *
- * 캐릭터별 공식은 "배율 x 스케일링 스탯"까지만 구하고(= base),
- * 그 뒤의 공통 계수는 전부 여기서 곱한다. 방어력/저항/치명타를
- * 캐릭터마다 다시 쓰면 한 군데만 틀려도 조용히 어긋나기 때문이다.
+ * 게임의 피해는 유형마다 공식이 다르다. 일반 피해는 공격력×배율에 방어/저항/
+ * 치명타를 곱하지만, 격파/초격파는 치명타도 속성피해증가도 안 받고 격파특효로
+ * 스케일하며 레벨 계수가 따로 있다. 그래서 유형별 함수로 나누고, 방어/저항/
+ * 취약처럼 공통인 계수만 공유한다. 캐릭터마다 다시 쓰면 한 곳만 틀려도
+ * 조용히 어긋나기 때문이다.
  *
- *   최종 피해 = base
- *             x (1 + 피해 증가)
- *             x 방어력 계수
- *             x (1 - 저항)
- *             x (1 + 취약)
- *             x 치명타 계수
- *             x 강인도 계수
+ * 유형(damage type):
+ *   normal     일반 피해 (공격력/HP/방어력 × 배율, 치명타 O)
+ *   break      격파 피해 (약점 격파 순간, 원소별 고정 × 격파특효, 치명타 X)
+ *   superBreak 초격파 (강인도 소모 × 격파특효, 치명타 X)
+ *   dot        지속 피해 (턴마다, 치명타 X)
  */
 
 /**
@@ -96,32 +97,111 @@ export function damageBoostMultiplier({ stats, element, extraBoost = 0 }) {
 }
 
 /**
- * 공통 계수를 base에 전부 곱한다.
- *
- * base 는 캐릭터 공식이 구한 "배율 x 스케일링 스탯"이다.
+ * 방어/저항/취약을 한 번에 묶는다. 세 유형이 공유한다.
  */
-export function computeDamage({
-    base,
-    element,
-    stats,
-    attackerLevel,
-    enemy,
-    extraBoost = 0,
-    defReduction = 0,
-    defIgnore = 0,
-    resPen = 0,
-    vulnerability = 0,
-    critMode = "expected"
+function mitigation({
+    attackerLevel, enemy, element,
+    defReduction = 0, defIgnore = 0, resPen = 0, vulnerability = 0
 }) {
+    return defenseMultiplier({ attackerLevel, enemy, defReduction, defIgnore })
+        * resistanceMultiplier({ enemy, element, resPen })
+        * (1 + vulnerability);
+}
 
+/**
+ * 일반 피해.
+ *
+ * base = 배율 × 스케일링 스탯. 여기에 속성피해증가/치명타/강인도 계수를 곱한다.
+ */
+export function normalDamage({
+    base, element, stats, attackerLevel, enemy,
+    extraBoost = 0, defReduction = 0, defIgnore = 0, resPen = 0,
+    vulnerability = 0, critMode = "expected"
+}) {
     return base
         * damageBoostMultiplier({ stats, element, extraBoost })
-        * defenseMultiplier({ attackerLevel, enemy, defReduction, defIgnore })
-        * resistanceMultiplier({ enemy, element, resPen })
-        * (1 + vulnerability)
+        * mitigation({ attackerLevel, enemy, element, defReduction, defIgnore, resPen, vulnerability })
         * criticalMultiplier({ stats, critMode })
         * toughnessMultiplier({ enemy });
+}
 
+/**
+ * 격파 피해. 약점을 격파하는 순간의 즉시 피해다.
+ *
+ *   격파 기본 = 원소배율 × 레벨계수(적 레벨) × 강인도계수
+ *   강인도계수 = 0.5 + MaxToughness / 40
+ *   격파 피해 = 격파 기본 × (1+격파특효) × (1+격파피해증가) × 방어 × 저항 × 취약
+ *
+ * 치명타도 속성피해증가도 받지 않는다. 격파 순간이라 강인도 감산(0.9)도 없다.
+ *
+ * NOTE: MaxToughness 단위(표기값 vs 유닛)는 인게임 격파 수치로 아직 확정
+ *       못 했다. 지금은 표기값(적 toughness) 기준이다. 초격파는 별개로 확정됨.
+ */
+export function breakDamage({
+    element, stats, attackerLevel, enemy,
+    breakDmgIncrease = 0, defReduction = 0, defIgnore = 0, resPen = 0, vulnerability = 0
+}) {
+    const ratio = BREAK_ELEMENT_RATIO[element] ?? 1;
+
+    const toughnessCoef = 0.5 + (enemy.toughness ?? 0) / 40;
+
+    const breakBase = ratio * breakLevelMultiplier(enemy.level) * toughnessCoef;
+
+    return breakBase
+        * (1 + (stats.breakEffect ?? 0))
+        * (1 + breakDmgIncrease)
+        * mitigation({ attackerLevel, enemy, element, defReduction, defIgnore, resPen, vulnerability });
+}
+
+/**
+ * 초격파. 타격의 강인도 소모량이 곧 피해로 환산된다.
+ *
+ *   초격파 = (강인도소모 ÷ 10) × 레벨계수 × 능력배율 × (1+격파특효)
+ *          × (1+격파피해증가) × (1+초격파증가) × 방어 × 저항 × 취약
+ *
+ * BitTopup 예시(강인도 90, 배율 0.25 => Base 8478 ≈ 8500)로 교차검증했다.
+ * toughnessReduction은 표기값이다(÷10으로 유닛 환산).
+ */
+export function superBreakDamage({
+    element, stats, attackerLevel, enemy, toughnessReduction, abilityMultiplier = 1,
+    breakDmgIncrease = 0, superBreakIncrease = 0,
+    defReduction = 0, defIgnore = 0, resPen = 0, vulnerability = 0
+}) {
+    return (toughnessReduction / 10)
+        * breakLevelMultiplier(enemy.level)
+        * abilityMultiplier
+        * (1 + (stats.breakEffect ?? 0))
+        * (1 + breakDmgIncrease)
+        * (1 + superBreakIncrease)
+        * mitigation({ attackerLevel, enemy, element, defReduction, defIgnore, resPen, vulnerability });
+}
+
+/**
+ * 지속 피해. 턴마다 들어가고 치명타가 없다.
+ * 속성피해증가는 받는다(격파와 다른 점). 강인도 감산도 없다.
+ */
+export function dotDamage({
+    base, element, stats, attackerLevel, enemy,
+    extraBoost = 0, defReduction = 0, defIgnore = 0, resPen = 0, vulnerability = 0
+}) {
+    return base
+        * damageBoostMultiplier({ stats, element, extraBoost })
+        * mitigation({ attackerLevel, enemy, element, defReduction, defIgnore, resPen, vulnerability });
+}
+
+/**
+ * 유형으로 라우팅한다. 선언형 능력 기술이 { type } 을 주면 여기가 받는다.
+ * type 기본값은 normal이라 기존 공식은 그대로 동작한다.
+ */
+export function computeDamage({ type = "normal", ...args }) {
+    switch (type) {
+        case "break":      return breakDamage(args);
+        case "superBreak": return superBreakDamage(args);
+        case "dot":        return dotDamage(args);
+        case "normal":     return normalDamage(args);
+        default:
+            throw new Error(`Unknown damage type: ${type}`);
+    }
 }
 
 /**
