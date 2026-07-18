@@ -171,6 +171,56 @@ const rawPlaceholders = await page.evaluate(() =>
 
 check("설명문에 raw 자리표시자가 없다", rawPlaceholders.length === 0, rawPlaceholders.join(", "));
 
+// 스킬이 메인 + 하위로 묶인다 (히메코•노바는 필살기/특성에 하위 스킬이 있다)
+await page.selectOption("#characterSelect", "himeko-nova");
+await page.waitForTimeout(700);
+
+check("스킬이 그룹으로 묶인다",
+    (await page.locator("#heroSkills .skill-group").count()) === 5);
+
+check("하위 스킬 아이콘이 있다",
+    (await page.locator("#heroSkills .hero-skill.sub").count()) > 0);
+
+// 메인 스킬을 누르면 종류 + 공격 방식 뱃지가 나온다
+await page.locator("#heroSkills .skill-group").nth(2).locator(".hero-skill").first().click();
+await page.waitForTimeout(300);
+check("메인 스킬에 종류 뱃지가 있다",
+    (await page.locator("#skillDetail .skill-type").innerText()) === "필살기");
+check("메인 스킬에 공격 방식 뱃지가 있다",
+    (await page.locator("#skillDetail .skill-tag").count()) === 1);
+
+// 하위 스킬을 누르면 종류 뱃지가 없다
+await page.locator("#heroSkills .hero-skill.sub").first().click();
+await page.waitForTimeout(300);
+check("하위 스킬에는 종류 뱃지가 없다",
+    (await page.locator("#skillDetail .skill-type").count()) === 0);
+
+// 작은 행적은 부모 큰 행적이 켜져 있어야 선택된다
+await page.selectOption("#characterSelect", "firefly");
+await page.waitForTimeout(700);
+
+// 부모가 있는 작은 행적(효과 저항, index 1)을 켠다
+await page.locator("#minorTraces .chip").nth(1).click();
+await page.waitForTimeout(300);
+check("작은 행적을 켤 수 있다",
+    (await page.locator("#minorTraces .chip.on").count()) === 1);
+
+// 부모 큰 행적을 끄면 종속 작은 행적이 해제된다
+await page.locator("#majorTraces .trace-row").first().click();
+await page.waitForTimeout(400);
+check("큰 행적을 끄면 종속 작은 행적이 해제된다",
+    (await page.locator("#minorTraces .chip.on").count()) === 0);
+
+// 큰 행적이 꺼진 상태에서는 작은 행적을 못 켠다
+await page.locator("#minorTraces .chip").nth(1).click();
+await page.waitForTimeout(300);
+check("큰 행적이 꺼지면 종속 작은 행적을 못 켠다",
+    (await page.locator("#minorTraces .chip.on").count()) === 0);
+
+// 큰 행적을 다시 켜기(정리)
+await page.locator("#majorTraces .trace-row").first().click();
+await page.waitForTimeout(300);
+
 // 돌파 효과 패널이 채워진다
 check("돌파 효과가 표시된다",
     await page.locator("#eidolonList .trace-row").count() === 6);

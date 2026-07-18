@@ -94,7 +94,7 @@ export async function handler(request) {
                 levelKey: action.levelKey,
                 maxLevel: action.maxLevel,
                 icon: action.icon,
-                tag: action.tags?.[0] ?? null,
+                tag: action.tag,
                 // 설명문에 실제 수치를 박으려면 원본과 params가 같이 필요하다.
                 desc: action.desc,
                 params: action.params,

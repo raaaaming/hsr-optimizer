@@ -300,11 +300,68 @@ function toActions(mainSkills, enSkills, slug, who) {
  * pointType Special = 큰 행적(A2/A4/A6), Attribute = 스탯을 주는 작은 행적.
  * Unknown은 개척자의 statusList가 빈 자리표시자 노드라 버린다.
  */
-function toTraces(subSkills, who) {
+/**
+ * 작은 행적 => 그 행적이 매달린 큰 행적 id.
+ *
+ * skillsTree는 행적 트리다. 루트가 큰 행적(Special)이면 그 아래 모든
+ * 작은 행적은 그 큰 행적을 켜야 열린다. 게임에서 능력 노드를 찍어야
+ * 그 가지의 스탯 노드로 진행할 수 있는 것과 같다.
+ *
+ * 루트가 그냥 작은 행적(1310201 같은 기본 노드)이면 부모가 없다.
+ *
+ *   { "작은행적id": "큰행적id" | null }
+ */
+function buildTraceParents(skillsTree, majorIds) {
+
+    const parents = {};
+
+    // 노드 하위의 모든 id를 모은다. tree(자식 객체)와 points(잎 배열)를 훑는다.
+    const collect = node => {
+
+        const ids = [];
+
+        for (const [childId, child] of Object.entries(node.tree ?? {})) {
+            ids.push(Number(childId), ...collect(child));
+        }
+
+        for (const point of node.points ?? []) {
+            ids.push(point);
+        }
+
+        return ids;
+
+    };
+
+    for (const [rootId, root] of Object.entries(skillsTree ?? {})) {
+
+        const major = majorIds.has(rootId) ? rootId : null;
+
+        // 루트 자신도 작은 행적일 수 있다(standalone). 부모는 없다.
+        if (!major) parents[rootId] = null;
+
+        for (const descendant of collect(root)) {
+            parents[String(descendant)] = major;
+        }
+
+    }
+
+    return parents;
+
+}
+
+function toTraces(subSkills, skillsTree, who) {
 
     const majorTraces = [];
 
     const minorTraces = [];
+
+    const majorIds = new Set(
+        Object.entries(subSkills ?? {})
+            .filter(([, node]) => node.pointType === "Special")
+            .map(([id]) => id)
+    );
+
+    const parents = buildTraceParents(skillsTree, majorIds);
 
     for (const [id, node] of Object.entries(subSkills ?? {})) {
 
@@ -340,6 +397,8 @@ function toTraces(subSkills, who) {
                 id,
                 stat: must(STAT_ICON_MAP, status.icon, "스탯 아이콘", who),
                 value: status.value,
+                // 이 작은 행적이 매달린 큰 행적. null이면 항상 열 수 있다.
+                parentMajor: parents[id] ?? null,
                 unlockAscension
             });
 
@@ -384,7 +443,8 @@ function transform(kr, en, meta, slug, now) {
 
     const who = `${kr.name}(${kr.id})`;
 
-    const { majorTraces, minorTraces } = toTraces(kr.traces?.subSkills, who);
+    const { majorTraces, minorTraces } =
+        toTraces(kr.traces?.subSkills, kr.traces?.skillsTree, who);
 
     const releasedAt = (meta.release ?? 0) * 1000;
 

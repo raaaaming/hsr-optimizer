@@ -161,6 +161,50 @@ const levelledActions = char => char.actions.filter((action, i, all) =>
     all.findIndex(a => a.levelKey === action.levelKey) === i
 );
 
+/** 스킬 종류. 액션 id/levelKey의 접두사로 판별한다(숫자 접미사 제거). */
+const SKILL_TYPE_LABEL = {
+    basic: "일반 공격",
+    skill: "전투 스킬",
+    ultimate: "필살기",
+    talent: "특성",
+    technique: "비술",
+    elationSkill: "환락 스킬",
+    assistSkill: "전투 지원 스킬"
+};
+
+const skillTypeLabel = levelKey =>
+    SKILL_TYPE_LABEL[levelKey] ?? levelKey;
+
+/**
+ * 스킬을 메인 + 하위로 묶는다.
+ *
+ * Yatta는 한 스킬 노드에 실제 스킬과 그 강화판/하위 스킬을 함께 담는다.
+ * 반디의 강화 일반 공격, 히메코•노바 필살기의 [초주파 입자 광선] 같은 게
+ * 하위 스킬이다. levelKey가 같으면 한 노드이므로 그걸로 묶는다.
+ *
+ * 각 그룹의 메인은 id === levelKey인 액션(레벨을 표기하는 대표 스킬),
+ * 나머지는 하위 스킬(레벨 없음)이다. 설명이 빈 하위는 버린다(중복 변형).
+ */
+function skillGroups(char) {
+
+    const groups = new Map();
+
+    for (const action of char.actions) {
+        if (!groups.has(action.levelKey)) {
+            groups.set(action.levelKey, { main: null, subs: [] });
+        }
+        const group = groups.get(action.levelKey);
+        if (action.id === action.levelKey) group.main = action;
+        else if (action.desc) group.subs.push(action);
+    }
+
+    // 메인이 없는 그룹은 없어야 하지만, 방어적으로 첫 하위를 메인으로 올린다.
+    return [...groups.values()].map(group =>
+        group.main ? group : { main: group.subs[0], subs: group.subs.slice(1) }
+    ).filter(group => group.main);
+
+}
+
 /**
  * 성흔을 감안한 스킬 레벨 상한. 서버 Character.maxSkillLevel()과 같은 계산이다.
  *
@@ -308,7 +352,17 @@ function renderEditor() {
 
         row.onclick = () => {
             if (locked) return toast(`${trace.unlockAscension}승급이 필요합니다.`, true);
-            state.traces.major[trace.id] = !state.traces.major[trace.id];
+            const next = !state.traces.major[trace.id];
+            state.traces.major[trace.id] = next;
+            // 큰 행적을 끄면 거기 매달린 작은 행적도 선택 해제한다.
+            if (!next) {
+                const orphans = new Set(
+                    char.minorTraces
+                        .filter(m => m.parentMajor === trace.id)
+                        .map(m => m.id)
+                );
+                state.traces.minor = state.traces.minor.filter(id => !orphans.has(id));
+            }
             renderEditor();
             refresh();
         };
@@ -316,16 +370,23 @@ function renderEditor() {
         return row;
     }));
 
-    // 작은 행적
+    // 작은 행적. 매달린 큰 행적(parentMajor)이 꺼져 있으면 못 켠다.
     $("minorTraces").replaceChildren(...char.minorTraces.map(trace => {
-        const locked = trace.unlockAscension > state.ascension;
+        const needsMajor = trace.parentMajor && !state.traces.major[trace.parentMajor];
+        const locked = trace.unlockAscension > state.ascension || needsMajor;
         const on = state.traces.minor.includes(trace.id) && !locked;
         const chip = el("label", `chip${on ? " on" : ""}`);
         chip.innerHTML =
             `${label(trace.stat)} +${fmt(trace.stat, trace.value)} <span class="n">A${trace.unlockAscension}</span>`;
         chip.style.opacity = locked ? .4 : 1;
         chip.onclick = () => {
-            if (locked) return toast(`${trace.unlockAscension}승급이 필요합니다.`, true);
+            if (trace.unlockAscension > state.ascension) {
+                return toast(`${trace.unlockAscension}승급이 필요합니다.`, true);
+            }
+            if (needsMajor) {
+                const major = char.majorTraces.find(m => m.id === trace.parentMajor);
+                return toast(`큰 행적 '${major?.name ?? ""}'을(를) 먼저 켜야 합니다.`, true);
+            }
             state.traces.minor = on
                 ? state.traces.minor.filter(id => id !== trace.id)
                 : [...state.traces.minor, trace.id];
@@ -776,7 +837,7 @@ const effectiveRows = () => new Set(
  * 아이콘만 봐서는 뭘 하는 스킬인지 알 수 없고, 레벨을 올릴 때 수치가
  * 어떻게 변하는지도 여기서만 확인할 수 있다.
  */
-function showSkill(action, level) {
+function showSkill(action, level, { isSub = false } = {}) {
 
     const box = $("skillDetail");
 
@@ -797,11 +858,48 @@ function showSkill(action, level) {
         (action.maxLevel > 1 ? ` <span class="n">Lv.${level}</span>` : "");
     wrap.append(head);
 
+    // 실제 스킬(하위 제외)은 종류와 공격 방식을 보여준다.
+    if (!isSub) {
+        const tags = el("div", "skill-tags");
+        tags.append(el("span", "skill-type", skillTypeLabel(action.levelKey)));
+        if (action.tag) tags.append(el("span", "skill-tag", action.tag));
+        wrap.append(tags);
+    }
+
     const desc = el("div", "passive-desc");
     desc.innerHTML = renderDesc(action.desc, action.params, level - 1);
     wrap.append(desc);
 
     box.replaceChildren(wrap);
+
+}
+
+/** 스킬 아이콘 하나(메인/하위 공용). */
+function skillIcon(char, action, { isSub = false } = {}) {
+
+    const cap = maxSkillLevel(char, action, state.eidolon);
+    const level = action.maxLevel > 1
+        ? Math.min(state.skills[action.levelKey] ?? cap, cap)
+        : 1;
+
+    const item = el("button", `hero-skill${isSub ? " sub" : ""}`);
+    item.type = "button";
+    item.title = action.name;
+
+    const icon = el("img");
+    Object.assign(icon, {
+        src: `/img/skill/${action.icon}.png`,
+        alt: action.name, loading: "lazy",
+        width: isSub ? 26 : 34, height: isSub ? 26 : 34
+    });
+    item.append(icon);
+
+    // 하위 스킬은 레벨을 표기하지 않는다. 메인 중 레벨이 있는 것만.
+    if (!isSub && action.maxLevel > 1) item.append(el("span", "lv", `${level}`));
+
+    item.onclick = () => showSkill(action, level, { isSub });
+
+    return item;
 
 }
 
@@ -811,30 +909,17 @@ function renderHero(char, data) {
     art.src = `/img/portrait/${char.icon}.png`;
     art.alt = data.character.name;
 
-    // 강화판(basic2 등)도 보여준다. 원본과 그림도 설명도 다르다.
-    $("heroSkills").replaceChildren(...char.actions.map(action => {
-        const cap = maxSkillLevel(char, action, state.eidolon);
-        const level = action.maxLevel > 1
-            ? Math.min(state.skills[action.levelKey] ?? cap, cap)
-            : 1;
-
-        const item = el("button", "hero-skill");
-        item.type = "button";
-        item.title = `${action.name} — 눌러서 설명 보기`;
-
-        const icon = el("img");
-        Object.assign(icon, {
-            src: `/img/skill/${action.icon}.png`,
-            alt: action.name, loading: "lazy", width: 34, height: 34
-        });
-
-        item.append(icon);
-        // 비술은 레벨이 없다. 뱃지를 달면 1레벨이 의미 있는 것처럼 보인다.
-        if (action.maxLevel > 1) item.append(el("span", "lv", `${level}`));
-
-        item.onclick = () => showSkill(action, level);
-
-        return item;
+    // 스킬을 메인 + 하위로 묶어서 보여준다. 하위 스킬(강화판, 소환수 스킬 등)은
+    // 메인 아래에 작은 아이콘으로 딸린다.
+    $("heroSkills").replaceChildren(...skillGroups(char).map(group => {
+        const wrap = el("div", "skill-group");
+        wrap.append(skillIcon(char, group.main));
+        if (group.subs.length) {
+            const subs = el("div", "skill-subs");
+            subs.append(...group.subs.map(sub => skillIcon(char, sub, { isSub: true })));
+            wrap.append(subs);
+        }
+        return wrap;
     }));
 
     const lightCone = META.lightCones.find(lc => lc.id === state.lightCone.id);

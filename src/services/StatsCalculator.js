@@ -116,12 +116,18 @@ export class StatsCalculator {
 
         const unlocked = new Set(build.traces?.minor ?? []);
 
+        const majorOn = build.traces?.major ?? {};
+
         for (const trace of character.minorTraces) {
 
             if (!unlocked.has(trace.id)) continue;
 
-            // 돌파가 모자라면 개방할 수 없다.
+            // 승급이 모자라면 개방할 수 없다.
             if (trace.unlockAscension > build.ascension) continue;
+
+            // 매달린 큰 행적이 꺼져 있으면 이 작은 행적도 열 수 없다.
+            // (UI가 막지만 저장된 빌드가 어긋날 수 있어 여기서도 지킨다)
+            if (trace.parentMajor && !majorOn[trace.parentMajor]) continue;
 
             add(trace.stat, trace.value);
 

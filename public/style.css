@@ -277,7 +277,16 @@ button.link {
 
 .hero-info { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 
-.hero-skills { display: flex; flex-wrap: wrap; gap: 6px; }
+.hero-skills { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: flex-start; }
+
+/* 메인 스킬 + 하위 스킬 묶음. 메인 위, 하위는 아래에 딸린다. */
+.skill-group { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.skill-subs {
+    display: flex;
+    gap: 4px;
+    padding-top: 5px;
+    border-top: 1px dashed var(--line);
+}
 
 /* 버튼이지만 아이콘만 보이게 크롬을 걷어낸다. */
 .hero-skill {
@@ -287,6 +296,7 @@ button.link {
     background: none;
     border: none;
     border-radius: 50%;
+    line-height: 0;
 }
 .hero-skill:hover img { border-color: var(--gold-dim); }
 
@@ -299,6 +309,14 @@ button.link {
     border: 1px solid var(--line);
     padding: 3px;
 }
+
+.hero-skill.sub img {
+    width: 26px;
+    height: 26px;
+    padding: 2px;
+    opacity: .85;
+}
+.hero-skill.sub:hover img { opacity: 1; }
 
 .hero-skill .lv {
     position: absolute;
@@ -682,3 +700,13 @@ button.link {
 
 /* set-row가 이제 세로로 쌓인다(제목 + 효과들) */
 .set-row { flex-direction: column; align-items: stretch; }
+
+/* 스킬 종류 / 공격 방식 뱃지 (스킬 상세) */
+.skill-tags { display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
+.skill-type, .skill-tag {
+    font-size: 10.5px;
+    padding: 2px 8px;
+    border-radius: 999px;
+}
+.skill-type { background: rgba(245,194,107,.16); color: var(--gold); }
+.skill-tag { background: var(--row); color: var(--muted); }

@@ -69,6 +69,12 @@ export class ActionDefinition {
         this.desc = "";
 
         /**
+         * 공격 방식(단일 공격 / 범위 공격 / 확산 / 강화 / 서포트 / 소환 / 방해 등).
+         * Yatta가 준 한국어 문자열이라 로케일 의존이지만 표시용이라 괜찮다.
+         */
+        this.tag = null;
+
+        /**
          * 스킬 최대 레벨 (일반 공격 6, 나머지 10 등). 1이면 레벨이 없다(비술).
          */
         this.maxLevel = 1;

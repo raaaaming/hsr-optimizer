@@ -47,6 +47,7 @@ export class CharacterLoader {
 
             action.params = actionJson.params ?? null;
             action.desc = actionJson.desc ?? "";
+            action.tag = actionJson.tag ?? null;
             action.maxLevel = actionJson.maxLevel ?? 1;
             action.skillId = actionJson.skillId ?? null;
             action.levelKey = actionJson.levelKey ?? action.id;
