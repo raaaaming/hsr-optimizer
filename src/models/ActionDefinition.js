@@ -29,9 +29,15 @@ export class ActionDefinition {
         this.sp = 0;
 
         /**
-         * 에너지 변화
+         * 에너지 변화 (이 스킬로 얻는 에너지)
          */
         this.energy = 0;
+
+        /**
+         * 강인도 감소 (표기값). 단일 대상 / 인접 대상.
+         */
+        this.toughness = 0;
+        this.toughnessSpread = 0;
 
         /**
          * 타격 수

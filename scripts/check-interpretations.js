@@ -23,6 +23,7 @@ import { fileURLToPath } from "node:url";
 import { STATS, SUBSTAT_ROLL_VALUES } from "../src/data/gameData.js";
 import { LIGHT_CONE_PASSIVES } from "../src/data/lightConePassives.js";
 import { RELIC_SET_EFFECTS } from "../src/data/relicSetEffects.js";
+import { SITUATIONAL_BUCKETS } from "../src/formula/modifiers.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -58,7 +59,11 @@ async function readSeed(file, column) {
 
 }
 
-function check(label, interpretations, seed) {
+/**
+ * getParams(seedValue, effect) => 그 효과의 자리표시자별 배열.
+ *   광추: 평평한 params. 유물 세트: 세트 개수(pieces)로 나뉜 params.
+ */
+function check(label, interpretations, seed, getParams) {
 
     const problems = [];
 
@@ -69,21 +74,29 @@ function check(label, interpretations, seed) {
             continue;
         }
 
-        const params = seed.get(slug);
+        const seedValue = seed.get(slug);
 
         for (const effect of effects) {
 
-            if (!Object.hasOwn(STATS, effect.stat)) {
+            // 광추는 bucket, 유물 세트는 stat을 쓴다. 버킷은 스탯(STATS) 또는
+            // 상황 버킷(SITUATIONAL_BUCKETS) 어느 쪽이어도 된다.
+            const bucket = effect.bucket ?? effect.stat;
+
+            if (!Object.hasOwn(STATS, bucket) && !SITUATIONAL_BUCKETS.has(bucket)) {
                 problems.push(
-                    `${label}: '${slug}'의 스탯 '${effect.stat}'가 STATS에 없다.`
+                    `${label}: '${slug}'의 버킷 '${bucket}'가 STATS/상황 버킷에 없다.`
                 );
             }
 
+            const params = getParams(seedValue, effect);
+
             const values = params?.[effect.param];
+
+            const pieces = effect.pieces ? ` (${effect.pieces}세트)` : "";
 
             if (!Array.isArray(values) || values.length === 0) {
                 problems.push(
-                    `${label}: '${slug}'의 자리표시자 #${effect.param}가 시드에 없다. ` +
+                    `${label}: '${slug}'${pieces}의 자리표시자 #${effect.param}가 시드에 없다. ` +
                     `(있는 것: ${Object.keys(params ?? {}).join(", ") || "없음"})`
                 );
                 continue;
@@ -91,7 +104,7 @@ function check(label, interpretations, seed) {
 
             if (typeof values[0] !== "number") {
                 problems.push(
-                    `${label}: '${slug}' #${effect.param}의 값이 숫자가 아니다.`
+                    `${label}: '${slug}'${pieces} #${effect.param}의 값이 숫자가 아니다.`
                 );
             }
 
@@ -184,14 +197,16 @@ async function main() {
         value => value.params ?? (value.desc !== undefined ? null : undefined)
     );
 
+    // 유물 세트는 세트 개수(2/4)로 나뉜 effects 전체를 보관한다.
     const relicSets = await readSeed(
         "src/data/generated/relic_sets.sql",
-        value => value["2"]?.params ?? (value["2"] ? null : undefined)
+        value => (value["2"] !== undefined || value["4"] !== undefined) ? value : undefined
     );
 
     const problems = [
-        ...check("광추", LIGHT_CONE_PASSIVES, lightCones),
-        ...check("유물 세트", RELIC_SET_EFFECTS, relicSets),
+        ...check("광추", LIGHT_CONE_PASSIVES, lightCones, sv => sv),
+        ...check("유물 세트", RELIC_SET_EFFECTS, relicSets,
+            (sv, effect) => sv[String(effect.pieces ?? 2)]?.params),
         ...checkSubstats()
     ];
 

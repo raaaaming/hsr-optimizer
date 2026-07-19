@@ -1,0 +1,101 @@
+/* 전투 시뮬레이터 전용 스타일. style.css 위에 얹는다. */
+
+.setup { max-width: 640px; margin: 12px auto; }
+.party-slots { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+.setup .primary { width: 100%; margin-top: 14px; }
+.empty-inline { color: var(--muted); font-size: 12px; }
+
+.battle {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--gap);
+    padding: var(--gap);
+    max-width: 1100px;
+    margin: 0 auto;
+}
+@media (min-width: 900px) {
+    .battle { grid-template-columns: 360px 1fr; align-items: start; }
+    .order-panel { position: sticky; top: 74px; }
+}
+
+/* 행동 순서 바 */
+.order-bar { display: flex; gap: 8px; flex-wrap: wrap; }
+.order-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    opacity: .6;
+}
+.order-item.now { opacity: 1; }
+.order-item .portrait {
+    border-radius: 50%;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+}
+.order-item.now .portrait { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(245,194,107,.3); }
+.now-label { font-size: 9px; color: var(--gold); margin-top: 2px; }
+
+/* 적 강인도 */
+.enemy-box { display: flex; flex-direction: column; gap: 8px; }
+.toughness-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.toughness-bar {
+    height: 12px;
+    background: var(--row);
+    border-radius: 999px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+}
+.toughness-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #7fdcff, #4f9fd6);
+    transition: width .25s;
+}
+.toughness-fill.broken { background: var(--gold); }
+.total-damage { font-size: 15px; font-weight: 700; color: var(--gold); }
+
+/* 현재 턴 */
+.current-turn { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.current-turn .portrait {
+    width: 56px; height: 56px; border-radius: 50%;
+    border: 2px solid var(--gold); background: var(--panel-2);
+}
+.turn-name { font-size: 18px; font-weight: 700; }
+
+/* 스킬 버튼 */
+.skill-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+.skill-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    text-align: left;
+    min-height: auto;
+    transition: border-color .15s, transform .1s;
+}
+.skill-btn:hover { border-color: var(--gold); }
+.skill-btn img { border-radius: 50%; background: var(--row); flex: none; }
+.skill-btn small { color: var(--muted); font-size: 10px; }
+
+/* 자원 */
+.resources { display: flex; gap: 16px; margin: 14px 0; flex-wrap: wrap; }
+.res { font-size: 13px; color: var(--muted); }
+.res b { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* 전투 기록 */
+.battle-log { display: flex; flex-direction: column; gap: 4px; }
+.log-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    background: var(--row);
+    border-radius: 8px;
+    font-size: 13px;
+}
+.log-skill { flex: 1; }
+.log-dmg { color: var(--gold); font-weight: 700; font-variant-numeric: tabular-nums; }
+.log-break { color: #7fdcff; font-size: 11px; }

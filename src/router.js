@@ -4,6 +4,7 @@ import * as CyclesAPI from "./api/cycles.js";
 import * as SimulateAPI from "./api/simulate.js";
 import * as MetaAPI from "./api/meta.js";
 import * as StatsAPI from "./api/stats.js";
+import * as BattleAPI from "./api/battle.js";
 
 import { createRepositories } from "./repositories/index.js";
 import { ensureGameData } from "./data/index.js";
@@ -19,7 +20,8 @@ const routes = {
     cycles: CyclesAPI.handler,
     simulate: SimulateAPI.handler,
     meta: MetaAPI.handler,
-    stats: StatsAPI.handler
+    stats: StatsAPI.handler,
+    battle: BattleAPI.handler
 };
 
 export async function router(request, env, ctx) {

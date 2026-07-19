@@ -283,6 +283,14 @@ function toActions(mainSkills, enSkills, slug, who) {
                 desc: skill.description ?? "",
                 tag: skill.tag ?? null,
                 maxLevel: node.maxLevel ?? 1,
+
+                // 전투 자원. Yatta의 skillPoints는 이름과 달리 에너지다.
+                //   base = 이 스킬로 얻는 에너지, need = 궁극기 요구 에너지(최대치)
+                // weaknessBreak = 강인도 감소 (one=단일, spread=인접).
+                energy: skill.skillPoints?.base ?? 0,
+                toughness: skill.weaknessBreak?.one ?? 0,
+                toughnessSpread: skill.weaknessBreak?.spread ?? 0,
+
                 skillId
             });
 
@@ -439,6 +447,19 @@ function toEidolons(eidolons) {
 
 }
 
+/**
+ * 궁극기 요구 에너지 = 최대 에너지. Yatta 궁극기 스킬의 skillPoints.need.
+ */
+function maxEnergyOf(mainSkills) {
+    for (const node of Object.values(mainSkills ?? {})) {
+        for (const skill of Object.values(node.skillList ?? {})) {
+            const need = skill.skillPoints?.need;
+            if (typeof need === "number") return need;
+        }
+    }
+    return 0;
+}
+
 function transform(kr, en, meta, slug, now) {
 
     const who = `${kr.name}(${kr.id})`;
@@ -447,6 +468,10 @@ function transform(kr, en, meta, slug, now) {
         toTraces(kr.traces?.subSkills, kr.traces?.skillsTree, who);
 
     const releasedAt = (meta.release ?? 0) * 1000;
+
+    // 최대 에너지는 캐릭터 스칼라라 stats에 함께 담는다(마이그레이션 회피).
+    const stats = toStats(kr.upgrade, who);
+    stats.maxEnergy = maxEnergyOf(kr.traces?.mainSkills);
 
     return {
         id: String(kr.id),
@@ -459,7 +484,7 @@ function transform(kr, en, meta, slug, now) {
         isBeta: releasedAt === 0 || releasedAt > now ? 1 : 0,
         releasedAt,
 
-        stats: toStats(kr.upgrade, who),
+        stats,
         actions: toActions(kr.traces?.mainSkills, en.traces?.mainSkills, slug, who),
         majorTraces,
         minorTraces,

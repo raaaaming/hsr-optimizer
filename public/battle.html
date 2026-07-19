@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HSR 전투 시뮬레이터</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/battle.css">
+</head>
+<body>
+
+<header class="topbar">
+    <h1>전투 시뮬레이터</h1>
+    <div class="topbar-actions">
+        <a href="/" class="link">← 빌드 최적화로</a>
+        <button id="restart" type="button" class="ghost">다시 시작</button>
+    </div>
+</header>
+
+<p id="toast" class="toast"></p>
+
+<!-- ===== 세팅 ===== -->
+<section id="setup" class="panel setup">
+    <h2 class="panel-title">전투 준비</h2>
+
+    <h3 class="section-title">파티 (전투 킷이 있는 캐릭터만)</h3>
+    <div id="partySlots" class="party-slots"></div>
+
+    <h3 class="section-title">적</h3>
+    <div class="grid-2">
+        <div class="field">
+            <label for="enemyLevel">레벨</label>
+            <input id="enemyLevel" type="number" min="1" max="95" value="80">
+        </div>
+        <div class="field">
+            <label for="enemyToughness">강인도</label>
+            <input id="enemyToughness" type="number" min="0" step="10" value="180">
+        </div>
+    </div>
+    <div class="field">
+        <label>약점 속성</label>
+        <div id="weaknessChips" class="chips"></div>
+    </div>
+
+    <button id="startBattle" type="button" class="primary">전투 시작</button>
+</section>
+
+<!-- ===== 전투 ===== -->
+<main id="battle" class="battle" hidden>
+
+    <section class="panel order-panel">
+        <h2 class="panel-title">행동 순서 <span id="battleTime" class="badge">AV 0</span></h2>
+        <div id="orderBar" class="order-bar"></div>
+
+        <h2 class="panel-title">적</h2>
+        <div class="enemy-box">
+            <div class="toughness">
+                <div class="toughness-label">강인도 <span id="toughValue"></span></div>
+                <div class="toughness-bar"><div id="toughFill" class="toughness-fill"></div></div>
+            </div>
+            <div id="totalDamage" class="total-damage">총 피해 0</div>
+        </div>
+
+        <h2 class="panel-title">활성 버프</h2>
+        <div id="activeBuffs" class="chips"></div>
+    </section>
+
+    <section class="panel turn-panel">
+        <div id="currentTurn" class="current-turn"></div>
+
+        <h2 class="panel-title">스킬</h2>
+        <div id="skills" class="skill-buttons"></div>
+
+        <div id="resources" class="resources"></div>
+
+        <h2 class="panel-title">전투 기록</h2>
+        <div id="battleLog" class="battle-log"></div>
+    </section>
+
+</main>
+
+<script src="/battle.js" type="module"></script>
+</body>
+</html>

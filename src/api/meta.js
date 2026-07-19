@@ -20,6 +20,7 @@ import { LIGHT_CONE_PASSIVES } from "../data/lightConePassives.js";
 import { RELIC_SET_EFFECTS } from "../data/relicSetEffects.js";
 import { defaultEffectiveStats } from "../data/effectiveStats.js";
 import { SIGNATURE_LIGHT_CONES } from "../data/signatureLightCones.js";
+import { kitSlugs } from "../data/kits/index.js";
 
 import {
     characterRegistry,
@@ -88,6 +89,8 @@ export async function handler(request) {
             isBeta: character.isBeta,
             // 그림 파일 이름이 곧 Yatta의 숫자 ID다. /img/character|portrait/{icon}.png
             icon: character.yattaId,
+            // 전투 시뮬용 최대 에너지(궁극기 요구치).
+            maxEnergy: character.stats?.maxEnergy ?? 0,
             actions: [...character.actions.values()].map(action => ({
                 id: action.id,
                 name: action.name,
@@ -95,6 +98,10 @@ export async function handler(request) {
                 maxLevel: action.maxLevel,
                 icon: action.icon,
                 tag: action.tag,
+                // 전투 자원.
+                energy: action.energy,
+                toughness: action.toughness,
+                toughnessSpread: action.toughnessSpread,
                 // 설명문에 실제 수치를 박으려면 원본과 params가 같이 필요하다.
                 desc: action.desc,
                 params: action.params,
@@ -127,7 +134,10 @@ export async function handler(request) {
 
         // 상시 스탯 보너스가 모델링된 광추. 나머지는 기본 스탯만 반영된다.
         // UI가 "이 광추는 패시브가 빠졌다"고 알려줄 수 있어야 한다.
-        lightConePassivesReady: Object.keys(LIGHT_CONE_PASSIVES)
+        lightConePassivesReady: Object.keys(LIGHT_CONE_PASSIVES),
+
+        // 전투 시뮬 킷이 있는 캐릭터. 이들만 전투에 넣을 수 있다.
+        battleKits: kitSlugs()
 
     });
 

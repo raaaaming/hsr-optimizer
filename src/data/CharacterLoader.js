@@ -40,6 +40,8 @@ export class CharacterLoader {
             action.tags = actionJson.tags ?? [];
             action.sp = actionJson.sp ?? 0;
             action.energy = actionJson.energy ?? 0;
+            action.toughness = actionJson.toughness ?? 0;
+            action.toughnessSpread = actionJson.toughnessSpread ?? 0;
             action.hitCount = actionJson.hitCount ?? 1;
             action.damage = actionJson.damage ?? true;
             action.effects = actionJson.effects ?? [];

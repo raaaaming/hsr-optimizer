@@ -6,8 +6,8 @@ import {
 } from "../data/gameData.js";
 
 import { lightConeRegistry, relicSetRegistry } from "../registry/index.js";
-import { LIGHT_CONE_PASSIVES } from "../data/lightConePassives.js";
-import { RELIC_SET_EFFECTS } from "../data/relicSetEffects.js";
+import { lightConeModifiers, relicSetModifiers } from "../formula/modifierSources.js";
+import { STAT_BUCKETS } from "../formula/modifiers.js";
 
 /**
  * 광추 기본 스탯. Character.baseStatsAt과 같은 공식이다.
@@ -138,8 +138,9 @@ export class StatsCalculator {
     /**
      * 광추 패시브의 상시 스탯 보너스.
      *
-     * 어느 자리표시자가 어느 스탯인지는 lightConePassives.js에 적혀 있고,
-     * 값은 시드의 원본 params에서 읽는다. 해석이 없는 광추는 건너뛴다.
+     * 광추 패시브는 이제 수정자 목록이다. 그중 조건 없는(상시) 스탯 버킷만
+     * 최종 스탯 시트에 반영한다. 조건부 버프(궤멸 상태 격파 피해 등)와 상황
+     * 버킷(dmgBoost 등)은 데미지 엔진의 몫이라 여기선 뺀다.
      */
     applyLightCone(build, add) {
 
@@ -147,17 +148,22 @@ export class StatsCalculator {
 
         if (!lightCone) return;
 
-        const effects = LIGHT_CONE_PASSIVES[lightCone.slug];
+        const modifiers = lightConeModifiers(
+            lightCone,
+            build.lightCone?.superimposition ?? 1
+        );
 
-        if (!effects) return;
+        for (const modifier of modifiers) {
 
-        const index = (build.lightCone.superimposition ?? 1) - 1;
+            // 정적 시트에는 "상시 · 자기(또는 전체 아군) · 스택 아님 · 스탯 버킷"만.
+            if (modifier.when) continue;                        // 조건부 => 데미지 전용
+            if (modifier.stacks) continue;                      // 스택 => 동적, 시트 아님
+            if (!STAT_BUCKETS.has(modifier.bucket)) continue;   // 상황 버킷 => 시트 아님
 
-        for (const effect of effects) {
+            const target = modifier.target ?? "self";
+            if (target !== "self" && target !== "allies") continue; // 착용자에게 안 걸림
 
-            const value = lightCone.passive?.params?.[effect.param]?.[index];
-
-            add(effect.stat, value);
+            add(modifier.bucket, modifier.value);
 
         }
 
@@ -186,29 +192,28 @@ export class StatsCalculator {
     }
 
     /**
-     * 2세트 효과의 상시 스탯 보너스.
+     * 유물 세트의 상시 스탯 보너스.
      *
-     * 광추 패시브와 같은 구조다. 해석은 relicSetEffects.js에, 수치는 시드에.
-     * 4세트 효과는 조건부가 대부분이라 스탯 합산에 넣지 않는다(설명만 보여준다).
+     * 광추와 같다. 세트 효과를 수정자로 만든 뒤, 시트엔 "상시·자기(또는 전체
+     * 아군)·스택 아님·스탯 버킷"만 반영한다. 조건부/피해 버프는 데미지 엔진의 몫.
      */
     applyRelicSets(build, add) {
 
-        for (const { id, count } of this.resolveSets(build)) {
+        const modifiers = relicSetModifiers(
+            this.resolveSets(build),
+            id => relicSetRegistry.get(id)
+        );
 
-            if (count < 2) continue;
+        for (const modifier of modifiers) {
 
-            const effects = RELIC_SET_EFFECTS[id];
+            if (modifier.when) continue;
+            if (modifier.stacks) continue;
+            if (!STAT_BUCKETS.has(modifier.bucket)) continue;
 
-            if (!effects) continue;
+            const target = modifier.target ?? "self";
+            if (target !== "self" && target !== "allies") continue;
 
-            const params = relicSetRegistry.get(id)?.effects?.["2"]?.params;
-
-            for (const effect of effects) {
-
-                // 세트 효과는 중첩 단계가 없어 배열 길이가 항상 1이다.
-                add(effect.stat, params?.[effect.param]?.[0]);
-
-            }
+            add(modifier.bucket, modifier.value);
 
         }
 
@@ -275,6 +280,29 @@ export class StatsCalculator {
         }
 
         return rolls;
+
+    }
+
+    /**
+     * 동적 버프를 얹은 전투 시점 스탯.
+     *
+     * 정적 스탯(행적/유물/광추)에 그 타격 순간의 버프(statBonus)를 더해
+     * 다시 combine한다. 공격력 버프가 기본 공격력에 곱해지는 것 등이
+     * 정적 버프와 똑같이 처리된다. 2층 수정자 시스템이 statBonus를 준다.
+     */
+    combatStats(character, build, statBonus = {}) {
+
+        const base = this.resolveBase(character, build);
+
+        const bonus = this.collectBonuses(character, build);
+
+        // 정적 + 동적 버킷 합산
+        const merged = { ...bonus };
+        for (const [key, value] of Object.entries(statBonus)) {
+            merged[key] = (merged[key] ?? 0) + value;
+        }
+
+        return this.combine(base, merged);
 
     }
 

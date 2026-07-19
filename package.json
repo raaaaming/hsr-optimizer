@@ -16,6 +16,8 @@
     "data:sync": "node scripts/sync-gamedata.js",
     "data:check": "node scripts/check-interpretations.js",
     "damage:check": "node scripts/check-damage.js",
+    "sim:check": "node scripts/check-sim.js",
+    "battle:check": "node scripts/check-battle.js",
     "img:sync": "node scripts/sync-images.js",
     "data:seed": "wrangler d1 execute hsr-optimizer --local --file=src/data/generated/characters.sql && wrangler d1 execute hsr-optimizer --local --file=src/data/generated/light_cones.sql && wrangler d1 execute hsr-optimizer --local --file=src/data/generated/relic_sets.sql",
     "data:seed:remote": "wrangler d1 execute hsr-optimizer --remote --file=src/data/generated/characters.sql && wrangler d1 execute hsr-optimizer --remote --file=src/data/generated/light_cones.sql && wrangler d1 execute hsr-optimizer --remote --file=src/data/generated/relic_sets.sql"

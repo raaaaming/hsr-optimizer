@@ -86,41 +86,59 @@ export function toughnessMultiplier({ enemy }) {
 }
 
 /**
- * 속성 피해 증가 + 추가 피해 증가.
+ * 피해 증가 계수 = 1 + 속성피해증가(스탯) + 상황 피해증가.
+ * 상황 dmgBoost는 전 타입/특정 타입 증가(2층 수정자가 채운다).
  */
-export function damageBoostMultiplier({ stats, element, extraBoost = 0 }) {
+export function damageBoostMultiplier({ stats, element, situational }) {
 
     const key = ELEMENT_DMG_KEY[element];
 
-    return 1 + (stats[key] ?? 0) + extraBoost;
+    return 1 + (stats[key] ?? 0) + (situational.dmgBoost ?? 0);
 
 }
 
 /**
- * 방어/저항/취약을 한 번에 묶는다. 세 유형이 공유한다.
- */
-function mitigation({
-    attackerLevel, enemy, element,
-    defReduction = 0, defIgnore = 0, resPen = 0, vulnerability = 0
-}) {
-    return defenseMultiplier({ attackerLevel, enemy, defReduction, defIgnore })
-        * resistanceMultiplier({ enemy, element, resPen })
-        * (1 + vulnerability);
-}
-
-/**
- * 일반 피해.
+ * 공격자와 무관한 완화 계수를 묶는다. 모든 유형이 공유한다.
  *
- * base = 배율 × 스케일링 스탯. 여기에 속성피해증가/치명타/강인도 계수를 곱한다.
+ *   방어 × 저항 × (1+취약) × (1-약화) × Π(1-피해감면)
+ *
+ * 약화(Weaken)와 피해감면(DMG Mitigation)은 위키 일반 공식의 항인데
+ * 지금까지 빠져 있었다. 보통 0이지만 일부 적/콘텐츠에서 걸린다.
+ */
+function mitigation({ attackerLevel, enemy, element, situational }) {
+    return defenseMultiplier({
+            attackerLevel, enemy,
+            defReduction: situational.defReduction ?? 0,
+            defIgnore: situational.defIgnore ?? 0
+        })
+        * resistanceMultiplier({ enemy, element, resPen: situational.resPen ?? 0 })
+        * (1 + (situational.vulnerability ?? 0))
+        * (1 - (situational.weaken ?? 0))
+        * (1 - (situational.dmgMitigation ?? 0));
+}
+
+/**
+ * Base DMG = 스케일링 스탯 × (능력배율 + 배율증가) + 고정 피해.
+ *
+ * base를 직접 주면(기존 공식) 그대로 쓰고, scaling+multiplier를 주면
+ * 여기서 조립한다(3층 descriptor 방식). 배율증가/고정피해는 후자에서만 는다.
+ */
+function baseDamage({ base, scaling, multiplier = 0, situational }) {
+    if (typeof base === "number") return base;
+    return (scaling ?? 0) * (multiplier + (situational.dmgMultiplierIncrease ?? 0))
+        + (situational.extraDmg ?? 0);
+}
+
+/**
+ * 일반 피해. 치명타 O, 약점 미격파 시 강인도 감산 0.9.
  */
 export function normalDamage({
-    base, element, stats, attackerLevel, enemy,
-    extraBoost = 0, defReduction = 0, defIgnore = 0, resPen = 0,
-    vulnerability = 0, critMode = "expected"
+    base, scaling, multiplier, element, stats, attackerLevel, enemy,
+    situational = {}, critMode = "expected"
 }) {
-    return base
-        * damageBoostMultiplier({ stats, element, extraBoost })
-        * mitigation({ attackerLevel, enemy, element, defReduction, defIgnore, resPen, vulnerability })
+    return baseDamage({ base, scaling, multiplier, situational })
+        * damageBoostMultiplier({ stats, element, situational })
+        * mitigation({ attackerLevel, enemy, element, situational })
         * criticalMultiplier({ stats, critMode })
         * toughnessMultiplier({ enemy });
 }
@@ -130,7 +148,7 @@ export function normalDamage({
  *
  *   격파 기본 = 원소배율 × 레벨계수(적 레벨) × 강인도계수
  *   강인도계수 = 0.5 + MaxToughness / 40
- *   격파 피해 = 격파 기본 × (1+격파특효) × (1+격파피해증가) × 방어 × 저항 × 취약
+ *   격파 피해 = 격파 기본 × (1+격파특효) × (1+격파피해증가) × 완화
  *
  * 치명타도 속성피해증가도 받지 않는다. 격파 순간이라 강인도 감산(0.9)도 없다.
  *
@@ -138,8 +156,7 @@ export function normalDamage({
  *       못 했다. 지금은 표기값(적 toughness) 기준이다. 초격파는 별개로 확정됨.
  */
 export function breakDamage({
-    element, stats, attackerLevel, enemy,
-    breakDmgIncrease = 0, defReduction = 0, defIgnore = 0, resPen = 0, vulnerability = 0
+    element, stats, attackerLevel, enemy, situational = {}
 }) {
     const ratio = BREAK_ELEMENT_RATIO[element] ?? 1;
 
@@ -149,31 +166,30 @@ export function breakDamage({
 
     return breakBase
         * (1 + (stats.breakEffect ?? 0))
-        * (1 + breakDmgIncrease)
-        * mitigation({ attackerLevel, enemy, element, defReduction, defIgnore, resPen, vulnerability });
+        * (1 + (situational.breakDmgIncrease ?? 0))
+        * mitigation({ attackerLevel, enemy, element, situational });
 }
 
 /**
  * 초격파. 타격의 강인도 소모량이 곧 피해로 환산된다.
  *
  *   초격파 = (강인도소모 ÷ 10) × 레벨계수 × 능력배율 × (1+격파특효)
- *          × (1+격파피해증가) × (1+초격파증가) × 방어 × 저항 × 취약
+ *          × (1+격파피해증가) × (1+초격파증가) × 완화
  *
  * BitTopup 예시(강인도 90, 배율 0.25 => Base 8478 ≈ 8500)로 교차검증했다.
  * toughnessReduction은 표기값이다(÷10으로 유닛 환산).
  */
 export function superBreakDamage({
-    element, stats, attackerLevel, enemy, toughnessReduction, abilityMultiplier = 1,
-    breakDmgIncrease = 0, superBreakIncrease = 0,
-    defReduction = 0, defIgnore = 0, resPen = 0, vulnerability = 0
+    element, stats, attackerLevel, enemy,
+    toughnessReduction, abilityMultiplier = 1, situational = {}
 }) {
     return (toughnessReduction / 10)
         * breakLevelMultiplier(enemy.level)
         * abilityMultiplier
         * (1 + (stats.breakEffect ?? 0))
-        * (1 + breakDmgIncrease)
-        * (1 + superBreakIncrease)
-        * mitigation({ attackerLevel, enemy, element, defReduction, defIgnore, resPen, vulnerability });
+        * (1 + (situational.breakDmgIncrease ?? 0))
+        * (1 + (situational.superBreakIncrease ?? 0))
+        * mitigation({ attackerLevel, enemy, element, situational });
 }
 
 /**
@@ -181,12 +197,11 @@ export function superBreakDamage({
  * 속성피해증가는 받는다(격파와 다른 점). 강인도 감산도 없다.
  */
 export function dotDamage({
-    base, element, stats, attackerLevel, enemy,
-    extraBoost = 0, defReduction = 0, defIgnore = 0, resPen = 0, vulnerability = 0
+    base, scaling, multiplier, element, stats, attackerLevel, enemy, situational = {}
 }) {
-    return base
-        * damageBoostMultiplier({ stats, element, extraBoost })
-        * mitigation({ attackerLevel, enemy, element, defReduction, defIgnore, resPen, vulnerability });
+    return baseDamage({ base, scaling, multiplier, situational })
+        * damageBoostMultiplier({ stats, element, situational })
+        * mitigation({ attackerLevel, enemy, element, situational });
 }
 
 /**
