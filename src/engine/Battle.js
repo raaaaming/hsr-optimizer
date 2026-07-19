@@ -205,9 +205,16 @@ export class Battle {
                 });
             }
 
-            // 강인도 감소는 시드값(Yatta). 첫 대상 기준으로 단순화.
+            // 강인도는 공격 속성이 적 약점과 같을 때만 깎인다.
             const seed = this.seedAction(member, skillId);
-            if (seed?.toughness) this.reduceToughness(seed.toughness);
+            if (seed?.toughness && (this.enemy.weakness ?? []).includes(element)) {
+                const wasBroken = this.enemy.currentToughness <= 0;
+                this.reduceToughness(seed.toughness);
+                // 방금 격파됐으면 적 행동게이지 25% 지연.
+                if (!wasBroken && this.enemy.currentToughness <= 0) {
+                    this.timeline.actionAdvance("enemy", -0.25);  // 25% 후퇴
+                }
+            }
 
         }
 

@@ -139,7 +139,7 @@ export function normalDamage({
     return baseDamage({ base, scaling, multiplier, situational })
         * damageBoostMultiplier({ stats, element, situational })
         * mitigation({ attackerLevel, enemy, element, situational })
-        * criticalMultiplier({ stats, critMode })
+        * criticalMultiplier({ stats, mode: critMode })
         * toughnessMultiplier({ enemy });
 }
 

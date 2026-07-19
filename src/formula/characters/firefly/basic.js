@@ -1,4 +1,4 @@
-import { DamageResult } from "../../../models/DamageResult.js";
+import { DamageResult } from "../../../models/index.js";
 import { computeDamage, resolveEnemy } from "../../damage.js";
 import { param } from "../../params.js";
 
